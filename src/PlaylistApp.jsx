@@ -202,11 +202,14 @@ export default function PlaylistApp() {
   }
   async function handleImportCSV() {
     console.log("버튼 클릭됨");
+    console.log("1. csvText:", csvText.slice(0,100));
     if (!csvText.trim()) { toast("CSV 내용을 붙여넣어 주세요!"); return; }
     // BOM 제거
     const cleaned = csvText.replace(/^﻿/,"").trim();
     const lines = cleaned.split(/\r?\n/);
+    console.log("2. lines:", lines.length, "/ header:", lines[0]?.slice(0,80));
     const header = parseNotionCSVLine(lines[0]);
+    console.log("3. header 파싱 결과:", header);
 
     const fi = (keywords) => header.findIndex(h => keywords.some(k => h.includes(k)));
     const titleIdx   = fi(["제목","title","노래"]);
@@ -216,6 +219,7 @@ export default function PlaylistApp() {
     const recIdx     = fi(["추천한","추천","recommender"]);
     const commentIdx = fi(["한 줄","코멘트","comment"]);
     const ytIdx      = fi(["youtube","유튜브","링크","url"]);
+    console.log("4. 열 인덱스:", { titleIdx, artistIdx, dateIdx, moodIdx, recIdx, commentIdx, ytIdx });
 
     if (titleIdx === -1) { toast("'제목' 열을 찾지 못했어요!"); return; }
 
@@ -253,6 +257,7 @@ export default function PlaylistApp() {
         date, month,
       });
     }
+    console.log("5. imported:", imported.length, "곡 / 첫 번째:", imported[0]);
 
     if (imported.length === 0) { toast("가져올 수 있는 데이터가 없어요 😢"); return; }
 
@@ -260,6 +265,7 @@ export default function PlaylistApp() {
     if (newMoods.size > 0) {
       const next = [...moods];
       newMoods.forEach(m => { if (!next.includes(m)) next.push(m); });
+      console.log("6. 새 태그 저장:", [...newMoods]);
       await setDoc(doc(db,"config","moods"),{list:next});
     }
 
@@ -276,15 +282,19 @@ export default function PlaylistApp() {
       });
     });
     if (Object.keys(themeMap).length > 0) {
+      console.log("7. 월별 테마 저장:", themeMap);
       await setDoc(doc(db,"config","monthThemes"),{...monthThemes,...themeMap});
     }
 
     // 곡 일괄 추가
+    console.log("8. Firestore addDoc 시작...");
     try {
       await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), songData)));
+      console.log("9. Firestore 저장 완료!");
       setCsvText(""); setShowImport(false);
       toast(`✅ ${imported.length}곡 가져오기 완료!`);
     } catch(e) {
+      console.error("9. Firestore 저장 실패:", e);
       toast(`❌ 저장 실패: ${e.message}`);
     }
   }
