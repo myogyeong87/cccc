@@ -416,7 +416,7 @@ export default function PlaylistApp() {
 
         {/* ══ 무드 필터 (BTS 보라 active) ══ */}
         <div style={{position:"relative"}}>
-          <div style={{...s.chipRow, ...(!showAllMoods?{maxHeight:44,overflow:"hidden"}:{})}}>
+          <div style={{...s.chipRow, ...(!showAllMoods?{maxHeight:34,overflow:"hidden"}:{})}}>
             {["전체",...moods].map(m=>{
               const isAll=m==="전체"; const active=isAll?filterMood===null:filterMood===m;
               return (
