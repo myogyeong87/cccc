@@ -74,6 +74,9 @@ export default function PlaylistApp() {
   const [notif, setNotif] = useState(null);
   const [csvText, setCsvText] = useState("");
 
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
+
   const [showAllMoods, setShowAllMoods] = useState(false);
   const [showArchiveDrop, setShowArchiveDrop] = useState(false);
   const [editingTheme, setEditingTheme] = useState(null);
@@ -91,6 +94,25 @@ export default function PlaylistApp() {
   const displaySongs = thisMonthSongs.filter(s=>!filterMood||s.mood.includes(filterMood));
 
   // ── Firestore 실시간 리스너 ──
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", () => setShowInstallBtn(false));
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  async function handleInstall() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+    if (outcome === "accepted") setShowInstallBtn(false);
+  }
+
   useEffect(() => {
     const unsubSongs = onSnapshot(collection(db, "songs"), snapshot => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -365,6 +387,9 @@ export default function PlaylistApp() {
             </div>
           </button>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {showInstallBtn&&(
+              <button style={s.installBtn} onClick={handleInstall}>📲 설치</button>
+            )}
             <button style={s.mgmtBtn} onClick={()=>setShowThemeMgr(true)}>⚙️ 설정</button>
             <button style={s.addBtn} onClick={()=>setShowAddSong(true)}>+ 곡 추가</button>
           </div>
@@ -922,6 +947,7 @@ const s = {
   logoTitle:{ fontSize:18,fontWeight:900,color:C.text,lineHeight:1.1 },
   logoSub:{ fontSize:11,color:C.sub,letterSpacing:1 },
   addBtn:{ background:C.accent,border:"none",borderRadius:22,padding:"8px 16px",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer" },
+  installBtn:{ background:C.shine,border:"none",borderRadius:22,padding:"8px 16px",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer" },
   blueBtn:{ background:C.accent,border:"none",borderRadius:22,padding:"8px 14px",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer" },
   mgmtBtn:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:22,padding:"8px 12px",color:C.sub,fontWeight:600,fontSize:13,cursor:"pointer" },
   main:{ maxWidth:700,margin:"0 auto",padding:"0 16px 60px" },
