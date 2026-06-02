@@ -279,9 +279,13 @@ export default function PlaylistApp() {
     }
 
     // 곡 일괄 추가
-    await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), songData)));
-    setCsvText(""); setShowImport(false);
-    toast(`✅ ${imported.length}곡 가져오기 완료!`);
+    try {
+      await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), songData)));
+      setCsvText(""); setShowImport(false);
+      toast(`✅ ${imported.length}곡 가져오기 완료!`);
+    } catch(e) {
+      toast(`❌ 저장 실패: ${e.message}`);
+    }
   }
 
   // ── 테마/태그 관리 ──
