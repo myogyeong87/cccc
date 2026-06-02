@@ -201,6 +201,7 @@ export default function PlaylistApp() {
     return new Date().toISOString().slice(0,10);
   }
   async function handleImportCSV() {
+    console.log("버튼 클릭됨");
     if (!csvText.trim()) { toast("CSV 내용을 붙여넣어 주세요!"); return; }
     // BOM 제거
     const cleaned = csvText.replace(/^﻿/,"").trim();
