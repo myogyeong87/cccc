@@ -967,7 +967,7 @@ const s = {
   playLabel:{ color:"#fff",fontSize:13,fontWeight:700 },
   stopBtn:{ flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 0",fontSize:13,cursor:"pointer",fontWeight:600,color:C.text },
   ytBtn:{ flex:1,background:"#FF0000",color:"#fff",border:"none",borderRadius:8,padding:"8px 0",fontSize:13,cursor:"pointer",fontWeight:700,textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center" },
-  detailComment:{ fontSize:14,color:C.sub,lineHeight:1.6,margin:"8px 0 12px",background:C.bg2,borderRadius:10,padding:"10px 14px" },
+  detailComment:{ fontSize:14,color:C.sub,lineHeight:1.6,margin:"8px 0 12px",background:C.bg2,borderRadius:10,padding:"10px 14px",whiteSpace:"pre-wrap" },
   detailFooter:{ display:"flex",justifyContent:"space-between",fontSize:12,color:C.sub,paddingTop:10,borderTop:`1px solid ${C.border}` },
   archive:{ marginTop:40 },
   sectionTitle:{ fontSize:16,fontWeight:800,marginBottom:14,color:C.text },
