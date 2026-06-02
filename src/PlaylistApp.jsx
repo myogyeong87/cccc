@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
-  collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot
+  collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy
 } from "firebase/firestore";
 
 // ── 컬러 팔레트: 잔잔한 미색 베이스, 태그가 돋보이게 ──
@@ -792,11 +792,105 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
             <button style={s.editBtn} onClick={e=>{e.stopPropagation();onEdit(song);}}>✏️ 수정</button>
             <button style={s.deleteBtn} onClick={e=>{e.stopPropagation();onDelete(song.id);}}>🗑️ 삭제</button>
           </div>
+          <ReactionSection songId={song.id}/>
         </div>
       )}
     </div>
   );
 }
+// ── 반응 / 댓글 ─────────────────────────────────────────────────
+const EMOJI_LIST = ['👍','😍','🎵','🔥','ㅠㅠ'];
+
+function ReactionSection({ songId }) {
+  const [emojiCounts, setEmojiCounts] = useState({});
+  const [myEmojis, setMyEmojis] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`cccc_e_${songId}`) || '[]'); } catch { return []; }
+  });
+  const [comments, setComments] = useState([]);
+  const [nickname, setNickname] = useState(() => localStorage.getItem('cccc_nickname') || '');
+  const [commentText, setCommentText] = useState('');
+
+  useEffect(() => {
+    const unsubReact = onSnapshot(doc(db,'reactions',songId), snap => {
+      setEmojiCounts(snap.exists() ? (snap.data().emojis || {}) : {});
+    });
+    const unsubCmt = onSnapshot(
+      query(collection(db,'reactions',songId,'comments'), orderBy('createdAt','desc')),
+      snap => setComments(snap.docs.map(d => ({id:d.id,...d.data()})))
+    );
+    return () => { unsubReact(); unsubCmt(); };
+  }, [songId]);
+
+  async function handleEmoji(emoji) {
+    const pressed = myEmojis.includes(emoji);
+    const next = pressed ? myEmojis.filter(e=>e!==emoji) : [...myEmojis,emoji];
+    setMyEmojis(next);
+    localStorage.setItem(`cccc_e_${songId}`, JSON.stringify(next));
+    await setDoc(doc(db,'reactions',songId),
+      { emojis: {...emojiCounts, [emoji]: Math.max(0,(emojiCounts[emoji]||0)+(pressed?-1:1))} },
+      { merge: true }
+    );
+  }
+
+  async function handleComment(e) {
+    e.stopPropagation();
+    if (!nickname.trim() || !commentText.trim()) return;
+    localStorage.setItem('cccc_nickname', nickname.trim());
+    await addDoc(collection(db,'reactions',songId,'comments'), {
+      nickname: nickname.trim(),
+      text: commentText.trim(),
+      date: new Date().toISOString().slice(0,10),
+      createdAt: Date.now(),
+    });
+    setCommentText('');
+  }
+
+  return (
+    <div style={{borderTop:`1px solid ${C.border}`,marginTop:14,paddingTop:14}}>
+      {/* 이모지 반응 */}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
+        {EMOJI_LIST.map(emoji => {
+          const active = myEmojis.includes(emoji);
+          const count = emojiCounts[emoji] || 0;
+          return (
+            <button key={emoji}
+              onClick={e=>{e.stopPropagation();handleEmoji(emoji);}}
+              style={{background:active?C.accentBg:C.white,border:`1.5px solid ${active?C.accent:C.border}`,
+                borderRadius:20,padding:'5px 10px',cursor:'pointer',fontSize:14,
+                display:'flex',alignItems:'center',gap:4,
+                fontWeight:active?700:500,color:active?C.accent:C.sub}}>
+              {emoji}{count>0&&<span style={{fontSize:12}}>{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {/* 댓글 목록 */}
+      {comments.length>0&&(
+        <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:6}}>
+          {comments.map(c=>(
+            <div key={c.id} style={{background:C.bg2,borderRadius:10,padding:'8px 12px',fontSize:13}}>
+              <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{c.nickname}</span>
+              <span style={{color:C.text}}>{c.text}</span>
+              <span style={{float:'right',fontSize:11,color:C.sub}}>{c.date}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {/* 댓글 입력 */}
+      <div style={{display:'flex',gap:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+        <input style={{...s.input,width:70,flexShrink:0,padding:'7px 10px',fontSize:13}}
+          placeholder="닉네임" value={nickname} onChange={e=>setNickname(e.target.value)}/>
+        <input style={{...s.input,flex:1,padding:'7px 10px',fontSize:13}}
+          placeholder="댓글 남기기" value={commentText}
+          onChange={e=>setCommentText(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&handleComment(e)}/>
+        <button style={{...s.submitBtn,flex:'none',padding:'7px 14px',fontSize:13,whiteSpace:'nowrap'}}
+          onClick={handleComment}>등록</button>
+      </div>
+    </div>
+  );
+}
+
 // ── 스타일 ───────────────────────────────────────────────────────
 const s = {
   root:{ minHeight:"100vh", background:C.bg, colorScheme:"light", fontFamily:"'Noto Sans KR','Apple SD Gothic Neo',sans-serif", color:C.text },
