@@ -75,6 +75,8 @@ export default function PlaylistApp() {
   const [csvText, setCsvText] = useState("");
 
   const [showAllMoods, setShowAllMoods] = useState(false);
+  const [editingTheme, setEditingTheme] = useState(null);
+  const [editingThemeVal, setEditingThemeVal] = useState("");
   const [form, setForm] = useState({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:""});
   const [previewId, setPreviewId] = useState(null);
   const [inlineTag, setInlineTag] = useState("");
@@ -303,6 +305,11 @@ export default function PlaylistApp() {
   }
 
   // ── 테마/태그 관리 ──
+  async function saveEditTheme(m) {
+    if (!editingThemeVal.trim()) return;
+    await setDoc(doc(db,"config","monthThemes"),{...monthThemes,[m]:editingThemeVal.trim()});
+    setEditingTheme(null); toast("✅ 테마 수정됨!");
+  }
   async function saveTheme() {
     if (!themeForm.month || !themeForm.theme) { toast("연월과 테마명을 입력해주세요!"); return; }
     const next={...monthThemes,[themeForm.month]:themeForm.theme};
@@ -415,20 +422,26 @@ export default function PlaylistApp() {
         )}
 
         {/* ══ 무드 필터 (BTS 보라 active) ══ */}
-        <div style={{...s.chipRow, ...(!showAllMoods?{flexWrap:"nowrap",overflow:"hidden"}:{flexWrap:"wrap"})}}>
-          {["전체",...moods].map(m=>{
-            const isAll=m==="전체"; const active=isAll?filterMood===null:filterMood===m;
-            return (
-              <button key={m} style={{...s.chip,...(active?s.chipActive:{})}}
-                onClick={()=>setFilterMood(isAll?null:(filterMood===m?null:m))}>
-                {!isAll&&<span style={{...s.chipDot,background:tagColor(m,moods)}}/>}{m}
+        {(()=>{
+          const allItems=["전체",...moods];
+          const visible=showAllMoods?allItems:allItems.slice(0,5);
+          return (
+            <div style={{...s.chipRow,flexWrap:showAllMoods?"wrap":"nowrap"}}>
+              {visible.map(m=>{
+                const isAll=m==="전체"; const active=isAll?filterMood===null:filterMood===m;
+                return (
+                  <button key={m} style={{...s.chip,...(active?s.chipActive:{})}}
+                    onClick={()=>setFilterMood(isAll?null:(filterMood===m?null:m))}>
+                    {!isAll&&<span style={{...s.chipDot,background:tagColor(m,moods)}}/>}{m}
+                  </button>
+                );
+              })}
+              <button style={s.moodToggleBtn} onClick={()=>setShowAllMoods(v=>!v)}>
+                {showAllMoods?"접기 −":"더보기 +"}
               </button>
-            );
-          })}
-          <button style={s.moodToggleBtn} onClick={()=>setShowAllMoods(v=>!v)}>
-            {showAllMoods?"− 접기":"+ 더보기"}
-          </button>
-        </div>
+            </div>
+          );
+        })()}
 
         {/* ══ 곡 목록 ══ */}
         <div style={s.list}>
@@ -580,9 +593,23 @@ export default function PlaylistApp() {
             <h3 style={s.mgmtSub}>📅 월별 테마 설정</h3>
             {Object.entries(monthThemes).sort().reverse().map(([m,theme])=>(
               <div key={m} style={s.themeRow}>
-                <span style={{fontWeight:700,fontSize:14,flex:1,color:C.text}}>{getMonthLabel(m)}</span>
-                <span style={{fontSize:13,color:C.bts,fontWeight:600}}>{theme}</span>
-                <button style={s.delBtn} onClick={async()=>{const n={...monthThemes};delete n[m];await setDoc(doc(db,"config","monthThemes"),n);}}>✕</button>
+                <span style={{fontWeight:700,fontSize:14,minWidth:80,color:C.text}}>{getMonthLabel(m)}</span>
+                {editingTheme===m ? (
+                  <>
+                    <input style={{...s.input,flex:1,padding:"4px 8px",fontSize:13}}
+                      value={editingThemeVal} autoFocus
+                      onChange={e=>setEditingThemeVal(e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&saveEditTheme(m)}/>
+                    <button style={s.delBtn} onClick={()=>saveEditTheme(m)}>✅</button>
+                    <button style={s.delBtn} onClick={()=>setEditingTheme(null)}>✕</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{flex:1,fontSize:13,color:C.bts,fontWeight:600}}>{theme}</span>
+                    <button style={s.delBtn} onClick={()=>{setEditingTheme(m);setEditingThemeVal(theme);}}>✏️</button>
+                    <button style={s.delBtn} onClick={async()=>{const n={...monthThemes};delete n[m];await setDoc(doc(db,"config","monthThemes"),n);}}>✕</button>
+                  </>
+                )}
               </div>
             ))}
             <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
