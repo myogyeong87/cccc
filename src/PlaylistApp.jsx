@@ -74,6 +74,7 @@ export default function PlaylistApp() {
   const [notif, setNotif] = useState(null);
   const [csvText, setCsvText] = useState("");
 
+  const [showAllMoods, setShowAllMoods] = useState(false);
   const [form, setForm] = useState({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:""});
   const [previewId, setPreviewId] = useState(null);
   const [inlineTag, setInlineTag] = useState("");
@@ -414,16 +415,21 @@ export default function PlaylistApp() {
         )}
 
         {/* ══ 무드 필터 (BTS 보라 active) ══ */}
-        <div style={s.chipRow}>
-          {["전체",...moods].map(m=>{
-            const isAll=m==="전체"; const active=isAll?filterMood===null:filterMood===m;
-            return (
-              <button key={m} style={{...s.chip,...(active?s.chipActive:{})}}
-                onClick={()=>setFilterMood(isAll?null:(filterMood===m?null:m))}>
-                {!isAll&&<span style={{...s.chipDot,background:tagColor(m,moods)}}/>}{m}
-              </button>
-            );
-          })}
+        <div style={{position:"relative"}}>
+          <div style={{...s.chipRow, ...(!showAllMoods?{maxHeight:44,overflow:"hidden"}:{})}}>
+            {["전체",...moods].map(m=>{
+              const isAll=m==="전체"; const active=isAll?filterMood===null:filterMood===m;
+              return (
+                <button key={m} style={{...s.chip,...(active?s.chipActive:{})}}
+                  onClick={()=>setFilterMood(isAll?null:(filterMood===m?null:m))}>
+                  {!isAll&&<span style={{...s.chipDot,background:tagColor(m,moods)}}/>}{m}
+                </button>
+              );
+            })}
+          </div>
+          <button style={s.moodToggleBtn} onClick={()=>setShowAllMoods(v=>!v)}>
+            {showAllMoods?"− 접기":"+ 더보기"}
+          </button>
         </div>
 
         {/* ══ 곡 목록 ══ */}
@@ -795,7 +801,8 @@ const s = {
   playerControls:{ display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:10 },
   playerNavBtn:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 16px",color:C.accent,fontWeight:700,fontSize:13,cursor:"pointer" },
   playerCounter:{ fontSize:13,color:C.sub,fontWeight:600 },
-  chipRow:{ display:"flex",flexWrap:"wrap",gap:7,margin:"14px 0" },
+  chipRow:{ display:"flex",flexWrap:"wrap",gap:7,margin:"14px 0 4px" },
+  moodToggleBtn:{ background:"none",border:"none",color:C.accent,fontSize:12,fontWeight:700,cursor:"pointer",padding:"2px 0 10px",display:"block" },
   chip:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",color:C.sub,fontSize:13,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:5 },
   chipActive:{ background:C.accent,border:`1px solid ${C.accent}`,color:"#fff",fontWeight:700 },
   chipDot:{ width:7,height:7,borderRadius:"50%",flexShrink:0 },
