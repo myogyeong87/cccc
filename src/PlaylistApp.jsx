@@ -648,12 +648,15 @@ export default function PlaylistApp() {
             onChange={e=>setEditSong(f=>({...f,recommender:e.target.value}))}/>
           <FL>무드 태그</FL>
           <div style={s.chipRow}>
-            {moods.map(m=>(
-              <button key={m} style={{...s.chip,...(editSong.mood.includes(m)?s.chipActive:{})}}
-                onClick={()=>toggleEditMood(m)}>
-                <span style={{...s.chipDot,background:tagColor(m,moods)}}/>{m}
-              </button>
-            ))}
+            {[...new Set([...moods, ...editSong.mood])].map(m=>{
+              const isDeleted=!moods.includes(m);
+              return (
+                <button key={m} style={{...s.chip,...(editSong.mood.includes(m)?s.chipActive:{}), ...(isDeleted?{opacity:0.5,textDecoration:"line-through"}:{})}}
+                  onClick={()=>toggleEditMood(m)}>
+                  <span style={{...s.chipDot,background:tagColor(m,moods)}}/>{m}
+                </button>
+              );
+            })}
           </div>
           <FL>한 줄 코멘트</FL>
           <textarea style={s.textarea} value={editSong.comment||""}
