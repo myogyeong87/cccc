@@ -76,6 +76,11 @@ export default function PlaylistApp() {
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [showIosGuide, setShowIosGuide] = useState(false);
+
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.navigator.standalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches;
 
   const [showAllMoods, setShowAllMoods] = useState(false);
   const [showArchiveDrop, setShowArchiveDrop] = useState(false);
@@ -393,8 +398,11 @@ export default function PlaylistApp() {
             </div>
           </button>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {showInstallBtn&&(
+            {!isStandalone && showInstallBtn && (
               <button style={s.installBtn} onClick={handleInstall}>📲 설치</button>
+            )}
+            {!isStandalone && isIOS && (
+              <button style={s.installBtn} onClick={()=>setShowIosGuide(true)}>📲 설치</button>
             )}
             <button style={s.mgmtBtn} onClick={()=>setShowThemeMgr(true)}>⚙️ 설정</button>
             <button style={s.addBtn} onClick={()=>setShowAddSong(true)}>+ 곡 추가</button>
@@ -743,6 +751,40 @@ export default function PlaylistApp() {
         </Modal>
       )}
 
+      {showIosGuide&&(
+        <Modal onClose={()=>setShowIosGuide(false)}>
+          <h2 style={s.modalTitle}>📲 홈 화면에 추가하기</h2>
+          <p style={{fontSize:13,color:C.sub,marginBottom:20}}>Safari에서 아래 순서대로 따라하면 앱처럼 사용할 수 있어요!</p>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div style={s.iosStep}>
+              <div style={s.iosNum}>1</div>
+              <div>
+                <div style={s.iosStepTitle}>하단 공유 버튼 탭</div>
+                <div style={s.iosStepDesc}>Safari 하단 가운데 <span style={s.iosIcon}>□↑</span> 버튼을 눌러요</div>
+              </div>
+            </div>
+            <div style={s.iosStep}>
+              <div style={s.iosNum}>2</div>
+              <div>
+                <div style={s.iosStepTitle}>"홈 화면에 추가" 선택</div>
+                <div style={s.iosStepDesc}>스크롤해서 <span style={s.iosIcon}>⊕ 홈 화면에 추가</span> 를 찾아 탭해요</div>
+              </div>
+            </div>
+            <div style={s.iosStep}>
+              <div style={s.iosNum}>3</div>
+              <div>
+                <div style={s.iosStepTitle}>"추가" 탭</div>
+                <div style={s.iosStepDesc}>오른쪽 위 <span style={s.iosIcon}>추가</span> 를 누르면 완료!</div>
+              </div>
+            </div>
+          </div>
+          <div style={{marginTop:20,background:C.accentBg,borderRadius:12,padding:"12px 16px",fontSize:13,color:C.accent,fontWeight:600}}>
+            💡 Chrome이 아닌 <b>Safari</b>에서만 홈 화면 추가가 가능해요
+          </div>
+          <button style={{...s.cancelBtn,marginTop:16,width:"100%"}} onClick={()=>setShowIosGuide(false)}>닫기</button>
+        </Modal>
+      )}
+
       {notif&&<div style={s.toast}>{notif}</div>}
     </div>
   );
@@ -1026,6 +1068,11 @@ const s = {
   themeRow:{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${C.border}` },
   delBtn:{ background:"none",border:"none",color:C.sub,fontSize:13,cursor:"pointer",padding:"2px 6px",fontWeight:700 },
   toast:{ position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:C.text,borderRadius:20,padding:"12px 24px",color:"#fff",fontSize:14,fontWeight:700,zIndex:300,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,0.2)" },
+  iosStep:{ display:"flex",alignItems:"flex-start",gap:14,padding:"12px 14px",background:C.bg2,borderRadius:12 },
+  iosNum:{ width:28,height:28,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,flexShrink:0 },
+  iosStepTitle:{ fontWeight:700,fontSize:14,color:C.text,marginBottom:3 },
+  iosStepDesc:{ fontSize:13,color:C.sub,lineHeight:1.5 },
+  iosIcon:{ background:C.border,borderRadius:6,padding:"1px 6px",fontSize:12,fontWeight:700,color:C.text },
   editBtn:{ flex:1,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 0",fontSize:13,cursor:"pointer",fontWeight:600,color:C.accent },
   deleteBtn:{ flex:1,background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"8px 0",fontSize:13,cursor:"pointer",fontWeight:600,color:"#DC2626" },
 };
