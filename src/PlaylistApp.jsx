@@ -95,6 +95,12 @@ export default function PlaylistApp() {
 
   // ── Firestore 실시간 리스너 ──
   useEffect(() => {
+    // index.html 인라인 스크립트가 먼저 잡아둔 프롬프트 확인
+    if (window.__pwaPrompt) {
+      setDeferredPrompt(window.__pwaPrompt);
+      setShowInstallBtn(true);
+      window.__pwaPrompt = null;
+    }
     const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);

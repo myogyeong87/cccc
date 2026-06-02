@@ -11,6 +11,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="춘천춘천" />
     <link rel="apple-touch-icon" href="/icon.svg" />
+    <script>
+      window.addEventListener('beforeinstallprompt', function(e) {
+        e.preventDefault();
+        window.__pwaPrompt = e;
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
