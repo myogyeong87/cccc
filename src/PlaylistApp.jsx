@@ -968,7 +968,7 @@ const s = {
   archive:{ marginTop:40 },
   sectionTitle:{ fontSize:16,fontWeight:800,marginBottom:14,color:C.text },
   archiveDropBtn:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:700,color:C.accent,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" },
-  archiveDropList:{ marginTop:10,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",background:C.white },
+  archiveDropList:{ marginTop:10,border:`1px solid ${C.border}`,borderRadius:14,background:C.white,maxHeight:260,overflowY:"auto" },
   archiveDropItem:{ width:"100%",padding:"12px 16px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:"none",border:"none",borderBottom:`1px solid ${C.border}` },
   archiveDropItemActive:{ background:C.accent },
   overlay:{ position:"fixed",inset:0,zIndex:200,background:"rgba(44,42,37,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center" },
