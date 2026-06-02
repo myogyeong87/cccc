@@ -885,10 +885,14 @@ function ReactionSection({ songId }) {
       {comments.length>0&&(
         <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:6}}>
           {comments.map(c=>(
-            <div key={c.id} style={{background:C.bg2,borderRadius:10,padding:'8px 12px',fontSize:13}}>
-              <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{c.nickname}</span>
-              <span style={{color:C.text}}>{c.text}</span>
-              <span style={{float:'right',fontSize:11,color:C.sub}}>{c.date}</span>
+            <div key={c.id} style={{background:C.bg2,borderRadius:10,padding:'8px 12px',fontSize:13,display:'flex',alignItems:'flex-start',gap:6}}>
+              <div style={{flex:1}}>
+                <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{c.nickname}</span>
+                <span style={{color:C.text}}>{c.text}</span>
+                <span style={{marginLeft:8,fontSize:11,color:C.sub}}>{c.date}</span>
+              </div>
+              <button onClick={async e=>{e.stopPropagation();if(!window.confirm("댓글을 삭제할까요?"))return;await deleteDoc(doc(db,'reactions',songId,'comments',c.id));}}
+                style={{background:'none',border:'none',color:C.sub,fontSize:12,cursor:'pointer',padding:'0 2px',flexShrink:0,lineHeight:1}}>✕</button>
             </div>
           ))}
         </div>
