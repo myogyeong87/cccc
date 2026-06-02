@@ -75,9 +75,10 @@ export default function PlaylistApp() {
   const [csvText, setCsvText] = useState("");
 
   const [showAllMoods, setShowAllMoods] = useState(false);
+  const [showArchiveDrop, setShowArchiveDrop] = useState(false);
   const [editingTheme, setEditingTheme] = useState(null);
   const [editingThemeVal, setEditingThemeVal] = useState("");
-  const [form, setForm] = useState({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:""});
+  const [form, setForm] = useState({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:"",date:new Date().toISOString().slice(0,10)});
   const [previewId, setPreviewId] = useState(null);
   const [inlineTag, setInlineTag] = useState("");
   const [themeForm, setThemeForm] = useState({month:"",theme:""});
@@ -117,9 +118,9 @@ export default function PlaylistApp() {
   async function handleAddSong() {
     if(!form.title||!form.artist||!form.recommender){ toast("제목, 가수, 추천인은 필수예요!"); return; }
     const youtubeId=extractYoutubeId(form.youtubeUrl)||"";
-    const today=new Date().toISOString().slice(0,10);
-    await addDoc(collection(db,"songs"),{title:form.title,artist:form.artist,youtubeId,mood:form.mood,recommender:form.recommender,comment:form.comment,date:today,month:today.slice(0,7)});
-    setForm({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:""});
+    const date=form.date||new Date().toISOString().slice(0,10);
+    await addDoc(collection(db,"songs"),{title:form.title,artist:form.artist,youtubeId,mood:form.mood,recommender:form.recommender,comment:form.comment,date,month:date.slice(0,7)});
+    setForm({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:"",date:new Date().toISOString().slice(0,10)});
     setInlineTag(""); setShowAddSong(false); toast("🎵 곡이 추가됐어요!");
   }
   function toggleFormMood(m){ setForm(f=>({...f,mood:f.mood.includes(m)?f.mood.filter(x=>x!==m):[...f.mood,m]})); }
@@ -341,7 +342,8 @@ export default function PlaylistApp() {
     if(!editSong.title||!editSong.artist||!editSong.recommender){ toast("제목, 가수, 추천인은 필수예요!"); return; }
     const youtubeId = extractYoutubeId(editSong.youtubeUrl)||editSong.youtubeId||"";
     const {id, youtubeUrl, ...rest} = editSong;
-    await updateDoc(doc(db,"songs",id),{...rest,youtubeId});
+    const month = (rest.date||"").slice(0,7)||rest.month;
+    await updateDoc(doc(db,"songs",id),{...rest,youtubeId,month});
     setEditSong(null);
     toast("✅ 수정됐어요!");
   }
@@ -457,23 +459,33 @@ export default function PlaylistApp() {
           ))}
         </div>
 
-        {/* ══ 아카이브 (SHINee 블루 계열) ══ */}
-        <section style={s.archive}>
-          <h2 style={s.sectionTitle}>📦 지난 플레이리스트</h2>
-          <div style={s.monthRow}>
-            {months.filter(m=>m!==currentMonth).map(m=>{
-              const cnt=songs.filter(s=>s.month===m).length; const active=selectedMonth===m;
-              return (
-                <button key={m} style={{...s.monthBtn,...(active?s.monthBtnActive:{})}}
-                  onClick={()=>{setSelectedMonth(active?null:m);setFilterMood(null);window.scrollTo({top:0,behavior:"smooth"});}}>
-                  <span style={{fontWeight:700,fontSize:14,color:active?"#fff":C.text}}>{getMonthLabel(m)}</span>
-                  {monthThemes[m]&&<span style={{fontSize:11,color:active?C.shineLight:C.shine}}>{monthThemes[m]}</span>}
-                  <span style={{fontSize:12,color:active?"#ccc":C.sub}}>{cnt}곡</span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        {/* ══ 아카이브 드롭다운 ══ */}
+        {months.filter(m=>m!==currentMonth).length>0&&(
+          <section style={s.archive}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <h2 style={{...s.sectionTitle,marginBottom:0}}>📦 지난 플레이리스트</h2>
+              <button style={s.archiveDropBtn} onClick={()=>setShowArchiveDrop(v=>!v)}>
+                {selectedMonth?getMonthLabel(selectedMonth):"월 선택"} {showArchiveDrop?"▲":"▼"}
+              </button>
+            </div>
+            {showArchiveDrop&&(
+              <div style={s.archiveDropList}>
+                {months.filter(m=>m!==currentMonth).map(m=>{
+                  const cnt=songs.filter(s=>s.month===m).length;
+                  const active=selectedMonth===m;
+                  return (
+                    <button key={m} style={{...s.archiveDropItem,...(active?s.archiveDropItemActive:{})}}
+                      onClick={()=>{setSelectedMonth(active?null:m);setFilterMood(null);setShowArchiveDrop(false);window.scrollTo({top:0,behavior:"smooth"});}}>
+                      <span style={{fontWeight:700,fontSize:14,color:active?"#fff":C.text}}>{getMonthLabel(m)}</span>
+                      {monthThemes[m]&&<span style={{fontSize:12,color:active?C.shineLight:C.shine}}>{monthThemes[m]}</span>}
+                      <span style={{fontSize:12,color:active?"rgba(255,255,255,0.7)":C.sub,marginLeft:"auto"}}>{cnt}곡</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
       </main>
 
       {/* ══ 곡 추가 모달 ══ */}
@@ -496,6 +508,8 @@ export default function PlaylistApp() {
           <input style={s.input} placeholder="아티스트명" value={form.artist} onChange={e=>setForm(f=>({...f,artist:e.target.value}))}/>
           <FL>추천인 *</FL>
           <input style={s.input} placeholder="내 닉네임" value={form.recommender} onChange={e=>setForm(f=>({...f,recommender:e.target.value}))}/>
+          <FL>날짜</FL>
+          <input style={s.input} type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))}/>
           <FL>무드 태그</FL>
           <div style={s.chipRow}>
             {moods.map(m=>(
@@ -673,6 +687,9 @@ export default function PlaylistApp() {
           <FL>추천인 *</FL>
           <input style={s.input} value={editSong.recommender}
             onChange={e=>setEditSong(f=>({...f,recommender:e.target.value}))}/>
+          <FL>날짜</FL>
+          <input style={s.input} type="date" value={editSong.date||""}
+            onChange={e=>setEditSong(f=>({...f,date:e.target.value}))}/>
           <FL>무드 태그</FL>
           <div style={s.chipRow}>
             {[...new Set([...moods, ...editSong.mood])].map(m=>{
@@ -779,7 +796,7 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
               )}
             </div>
           )}
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12,marginBottom:12}}>
             {song.mood.map(m=><span key={m} style={tagStyle(m,moods)}>{m}</span>)}
           </div>
           {song.comment&&<p style={s.detailComment}>💬 {song.comment}</p>}
@@ -950,9 +967,10 @@ const s = {
   detailFooter:{ display:"flex",justifyContent:"space-between",fontSize:12,color:C.sub,paddingTop:10,borderTop:`1px solid ${C.border}` },
   archive:{ marginTop:40 },
   sectionTitle:{ fontSize:16,fontWeight:800,marginBottom:14,color:C.text },
-  monthRow:{ display:"flex",flexWrap:"wrap",gap:10 },
-  monthBtn:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:14,padding:"12px 16px",cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:3 },
-  monthBtnActive:{ background:C.accent,border:`1px solid ${C.accent}` },
+  archiveDropBtn:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:700,color:C.accent,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" },
+  archiveDropList:{ marginTop:10,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",background:C.white },
+  archiveDropItem:{ width:"100%",padding:"12px 16px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:"none",border:"none",borderBottom:`1px solid ${C.border}` },
+  archiveDropItemActive:{ background:C.accent },
   overlay:{ position:"fixed",inset:0,zIndex:200,background:"rgba(44,42,37,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center" },
   modal:{ background:C.bg,borderRadius:"22px 22px 0 0",padding:"20px 20px 40px",width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto" },
   modalHandle:{ width:36,height:4,background:C.border,borderRadius:2,margin:"0 auto 16px" },
