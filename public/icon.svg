@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="90" fill="#7A6A52"/>
-  <text x="256" y="360" font-size="300" text-anchor="middle" font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, Segoe UI Symbol, sans-serif">🎵</text>
+  <!-- stem -->
+  <rect x="274" y="120" width="28" height="225" rx="14" fill="white"/>
+  <!-- note head -->
+  <ellipse cx="212" cy="338" rx="74" ry="53" transform="rotate(-18 212 338)" fill="white"/>
+  <!-- flag -->
+  <path d="M302 120 Q400 178 368 285" stroke="white" stroke-width="28" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
