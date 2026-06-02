@@ -261,41 +261,43 @@ export default function PlaylistApp() {
 
     if (imported.length === 0) { toast("가져올 수 있는 데이터가 없어요 😢"); return; }
 
-    // 새 태그 Firestore 저장
-    if (newMoods.size > 0) {
-      const next = [...moods];
-      newMoods.forEach(m => { if (!next.includes(m)) next.push(m); });
-      console.log("6. 새 태그 저장:", [...newMoods]);
-      await setDoc(doc(db,"config","moods"),{list:next});
-    }
-
-    // 월별 테마 자동 등록
-    const themeMap = {};
-    imported.forEach(s => {
-      s.mood.forEach(tag => {
-        const tm = tag.match(/^(\d{1,2})월의 테마$/);
-        if (tm) {
-          const mo = String(tm[1]).padStart(2,"0");
-          const key = s.month.slice(0,4) + "-" + mo;
-          themeMap[key] = tag;
-        }
-      });
-    });
-    if (Object.keys(themeMap).length > 0) {
-      console.log("7. 월별 테마 저장:", themeMap);
-      await setDoc(doc(db,"config","monthThemes"),{...monthThemes,...themeMap});
-    }
-
-    // 곡 일괄 추가
-    console.log("8. Firestore addDoc 시작...");
     try {
+      // 새 태그 Firestore 저장
+      if (newMoods.size > 0) {
+        const next = [...moods];
+        newMoods.forEach(m => { if (!next.includes(m)) next.push(m); });
+        console.log("6. 새 태그 저장 시도:", [...newMoods]);
+        await setDoc(doc(db,"config","moods"),{list:next});
+        console.log("6. 새 태그 저장 완료");
+      }
+
+      // 월별 테마 자동 등록
+      const themeMap = {};
+      imported.forEach(s => {
+        s.mood.forEach(tag => {
+          const tm = tag.match(/^(\d{1,2})월의 테마$/);
+          if (tm) {
+            const mo = String(tm[1]).padStart(2,"0");
+            const key = s.month.slice(0,4) + "-" + mo;
+            themeMap[key] = tag;
+          }
+        });
+      });
+      if (Object.keys(themeMap).length > 0) {
+        console.log("7. 월별 테마 저장 시도:", themeMap);
+        await setDoc(doc(db,"config","monthThemes"),{...monthThemes,...themeMap});
+        console.log("7. 월별 테마 저장 완료");
+      }
+
+      // 곡 일괄 추가
+      console.log("8. Firestore addDoc 시작...");
       await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), songData)));
       console.log("9. Firestore 저장 완료!");
       setCsvText(""); setShowImport(false);
       toast(`✅ ${imported.length}곡 가져오기 완료!`);
     } catch(e) {
-      console.error("9. Firestore 저장 실패:", e);
-      toast(`❌ 저장 실패: ${e.message}`);
+      console.error("❌ Firestore 오류:", e.code, e.message);
+      toast(`❌ 저장 실패 (${e.code}): ${e.message}`);
     }
   }
 
