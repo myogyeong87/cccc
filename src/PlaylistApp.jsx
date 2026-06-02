@@ -514,7 +514,7 @@ export default function PlaylistApp() {
               {exportText().slice(0,300)}{exportText().length>300?"...":""}
             </pre>
           </div>
-          <button style={{...s.cancelBtn,marginTop:14}} onClick={()=>setShowExport(false)}>닫기</button>
+          <button style={{...s.cancelBtn,marginTop:14,width:"100%"}} onClick={()=>setShowExport(false)}>닫기</button>
         </Modal>
       )}
 
@@ -598,7 +598,7 @@ export default function PlaylistApp() {
                 onClick={()=>{setShowThemeMgr(false);setShowImport(true);}}>⬇ 노션 가져오기</button>
             </div>
           </div>
-          <button style={{...s.cancelBtn,marginTop:4}} onClick={()=>setShowThemeMgr(false)}>닫기</button>
+          <button style={{...s.cancelBtn,marginTop:4,width:"100%"}} onClick={()=>setShowThemeMgr(false)}>닫기</button>
         </Modal>
       )}
 
@@ -816,8 +816,8 @@ const s = {
   inlineTagRow:{ display:"flex",gap:8,marginTop:10 },
   inlineTagBtn:{ background:C.accent,border:"none",borderRadius:10,padding:"10px 14px",color:"#fff",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap" },
   modalBtns:{ display:"flex",gap:10,marginTop:20 },
-  cancelBtn:{ flex:1,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:14,color:C.sub,fontSize:15,cursor:"pointer",width:"100%" },
-  submitBtn:{ background:C.accent,border:"none",borderRadius:12,padding:"12px 16px",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer" },
+  cancelBtn:{ flex:1,background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:14,color:C.sub,fontSize:15,cursor:"pointer" },
+  submitBtn:{ flex:1,background:C.accent,border:"none",borderRadius:12,padding:"12px 16px",color:"#fff",fontWeight:800,fontSize:14,cursor:"pointer" },
   exportGrid:{ display:"flex",flexDirection:"column",gap:10,marginBottom:4 },
   exportCard:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:14,textAlign:"left" },
   importGuide:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:14,marginBottom:4 },
