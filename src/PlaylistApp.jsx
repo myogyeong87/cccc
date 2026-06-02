@@ -446,7 +446,7 @@ export default function PlaylistApp() {
         {/* ══ 곡 목록 ══ */}
         <div style={s.list}>
           {displaySongs.length===0&&(
-            <div style={s.empty}><div style={{fontSize:40}}>🎶</div><p>아직 곡이 없어요</p></div>
+            <div style={s.empty}><div style={{fontSize:40}}>🎶</div><div style={{marginTop:10}}>아직 곡이 없어요</div></div>
           )}
           {displaySongs.map((song,i)=>(
             <SongRow key={song.id} song={song} index={i+1} moods={moods}
@@ -835,7 +835,7 @@ const s = {
   chipActive:{ background:C.accent,border:`1px solid ${C.accent}`,color:"#fff",fontWeight:700 },
   chipDot:{ width:7,height:7,borderRadius:"50%",flexShrink:0 },
   list:{ display:"flex",flexDirection:"column",gap:8 },
-  empty:{ textAlign:"center",padding:"48px 0",color:C.sub },
+  empty:{ textAlign:"center",padding:"48px 0",color:C.sub,display:"flex",flexDirection:"column",alignItems:"center" },
   row:{ background:C.white,borderRadius:14,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",border:`1px solid ${C.border}` },
   rowMain:{ display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer" },
   rowNum:{ fontSize:12,color:C.border,fontWeight:700,minWidth:22 },
