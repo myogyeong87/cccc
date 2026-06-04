@@ -448,23 +448,27 @@ export default function PlaylistApp() {
           </div>
         </div>
 
-        {/* 재생 바 개편 */}
+        {/* 재생 바 */}
         <div style={s.playbar}>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",width:"100%"}}>
+          <div style={{fontSize:11,color:C.sub,fontWeight:600,marginBottom:8,letterSpacing:0.3}}>🎶 연속재생</div>
+          <div style={{display:"flex",gap:6,width:"100%"}}>
             <button
               style={{...s.playbarBtn,...(playlistMode&&playlistType==="month"?s.playbarBtnActive:{})}}
               onClick={startPlaylist}>
-              ▶ 이번 달 <span style={s.playbarCount}>({playlistSongs.length}곡)</span>
+              <span>▶ 이번 달</span>
+              <span style={s.playbarCount}>{playlistSongs.length}곡</span>
             </button>
             <button
               style={{...s.playbarBtn,...(playlistMode&&playlistType==="all"?s.playbarBtnActive:{})}}
               onClick={startPlaylistAll}>
-              ▶ 전체 <span style={s.playbarCount}>({allPlaylistSongs.length}곡)</span>
+              <span>▶ 전체</span>
+              <span style={s.playbarCount}>{allPlaylistSongs.length}곡</span>
             </button>
             <button
               style={{...s.playbarBtn,...(showTagPlay||playlistType==="tag"?s.playbarBtnActive:{})}}
               onClick={()=>setShowTagPlay(v=>!v)}>
-              🏷️ 태그로 듣기
+              <span>🏷️ 태그</span>
+              <span style={s.playbarCount}>선택</span>
             </button>
           </div>
           {showTagPlay && (
@@ -1070,9 +1074,9 @@ const s = {
   heroTitle:{ fontSize:22,fontWeight:900,margin:"4px 0 4px",color:C.text },
   backBtn:{ background:C.bg3,border:`1px solid ${C.border}`,borderRadius:12,padding:"4px 12px",color:C.sub,fontSize:12,cursor:"pointer",fontWeight:700 },
   playbar:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",margin:"12px 0",display:"flex",flexDirection:"column",gap:0 },
-  playbarBtn:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 16px",color:C.accent,fontWeight:700,fontSize:13,cursor:"pointer" },
+  playbarBtn:{ flex:1,background:C.white,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 4px",color:C.accent,fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2 },
   playbarBtnActive:{ background:C.accent,border:`1px solid ${C.accent}`,color:"#fff" },
-  playbarCount:{ fontWeight:500,opacity:0.8,fontSize:12 },
+  playbarCount:{ fontWeight:500,opacity:0.75,fontSize:11 },
   playerCard:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:16,padding:16,marginBottom:16 },
   playerHeader:{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 },
   playerTitle:{ fontWeight:800,fontSize:15,color:C.text },
