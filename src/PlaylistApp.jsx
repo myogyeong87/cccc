@@ -110,6 +110,7 @@ export default function PlaylistApp() {
 
   const ytPlayerRef = useRef(null);
   const nextTrackRef = useRef(null);
+  const playerWrapRef = useRef(null);
   const currentVideoId = playlistMode && activeSongs.length > 0 ? (activeSongs[playlistIdx]?.youtubeId ?? null) : null;
 
   useEffect(() => {
@@ -175,26 +176,40 @@ export default function PlaylistApp() {
       }
       return;
     }
-    function initPlayer() {
-      if (ytPlayerRef.current) {
-        ytPlayerRef.current.loadVideoById(currentVideoId);
-        return;
-      }
-      ytPlayerRef.current = new window.YT.Player('yt-playlist-player', {
+    if (!playerWrapRef.current) return;
+
+    // 기존 플레이어 완전 제거 후 새 마운트 포인트 생성
+    if (ytPlayerRef.current) {
+      try { ytPlayerRef.current.destroy(); } catch (e) {}
+      ytPlayerRef.current = null;
+    }
+    playerWrapRef.current.innerHTML = '';
+    const el = document.createElement('div');
+    playerWrapRef.current.appendChild(el);
+
+    function createPlayer() {
+      ytPlayerRef.current = new window.YT.Player(el, {
         videoId: currentVideoId,
         playerVars: { autoplay: 1, rel: 0 },
         events: {
-          onStateChange(e) {
-            if (e.data === window.YT.PlayerState.ENDED) nextTrackRef.current?.();
+          onReady: (ev) => {
+            const iframe = ev.target.getIframe();
+            iframe.style.width = '100%';
+            iframe.style.height = '100%';
+            iframe.style.border = 'none';
+          },
+          onStateChange: (event) => {
+            if (event.data === window.YT.PlayerState.ENDED) nextTrackRef.current?.();
           }
         }
       });
     }
+
     if (window.YT?.Player) {
-      initPlayer();
+      createPlayer();
     } else {
       const prev = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); initPlayer(); };
+      window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); createPlayer(); };
     }
   }, [currentVideoId]);
 
@@ -546,9 +561,7 @@ export default function PlaylistApp() {
               </div>
               <button style={s.playerClose} onClick={stopPlaylist}>✕</button>
             </div>
-            <div style={s.playerWrap}>
-              <div id="yt-playlist-player" style={{width:"100%",height:"100%"}}/>
-            </div>
+            <div style={s.playerWrap} ref={playerWrapRef}/>
             <div style={s.playerControls}>
               <button style={s.playerNavBtn} onClick={prevTrack} disabled={playlistIdx===0}>⏮ 이전</button>
               <span style={s.playerCounter}>{playlistIdx+1} / {activeSongs.length}</span>
