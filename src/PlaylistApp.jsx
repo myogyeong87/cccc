@@ -1,35 +1,24 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase";
 import {
   collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy
 } from "firebase/firestore";
 
-// ── 컬러 팔레트: 잔잔한 미색 베이스, 태그가 돋보이게 ──
 const C = {
-  bg:      "#FAF8F4",   // 따뜻한 미색 배경
-  bg2:     "#F3F0EA",   // 카드/섹션 배경
-  bg3:     "#EDE9E0",   // 살짝 더 진한 구분선 배경
+  bg:      "#F0F4E8",
+  bg2:     "#E8EDDC",
+  bg3:     "#DDE5CE",
   white:   "#FFFFFF",
-  text:    "#2C2A25",   // 따뜻한 다크 브라운
-  sub:     "#9A9080",   // 서브 텍스트
-  border:  "#E4DFD4",   // 보더
-  accent:  "#7A6A52",   // 포인트 (따뜻한 브라운)
-  accentBg:"#F0EBE0",   // 포인트 배경
-  bts:     "#6B4FBB",
-  btsMid:  "#9B7FE8",
-  btsLight:"#D4BBFF",
-  btsBg:   "#F5F3FA",
-  shine:   "#2EB5A0",
-  shineMid:"#5ECFBE",
-  shineLight:"#A8EBE3",
-  shineBg: "#EDFAF8",
-  borderB: "#B8E8E2",
+  text:    "#252B1E",
+  sub:     "#6B8050",
+  border:  "#C4D9A8",
+  accent:  "#5C7A3E",
+  accentBg:"#E0EAD0",
 };
 
-// 태그 색상: 태그만 선명하게 (파스텔이지만 채도 있게)
 const TAG_COLORS = [
-  "#E05C7A", "#4AABF0", "#E8873A", "#6BB86B",
-  "#9B72D4", "#3ABAB4", "#D4944A", "#C45C9A",
+  "#C4622A", "#5C7A3E", "#B5756A", "#4A8A7A",
+  "#9B6B3E", "#7A5C8A", "#3E7A6B", "#8A7A3E",
 ];
 
 function tagColor(tag, allMoods) {
@@ -53,21 +42,21 @@ function getMonthLabel(ms) {
   const [y,m]=ms.split("-"); return `${y}년 ${parseInt(m)}월`;
 }
 
-// ── 메인 앱 ─────────────────────────────────────────────────────
 export default function PlaylistApp() {
   const [songs, setSongs] = useState([]);
   const [monthThemes, setMonthThemes] = useState({});
   const [moods, setMoods] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(null);
-  const [filterMood, setFilterMood] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [playingId, setPlayingId] = useState(null);
   const [playlistMode, setPlaylistMode] = useState(false);
   const [playlistIdx, setPlaylistIdx] = useState(0);
-  const [playlistAll, setPlaylistAll] = useState(false);
+  const [playlistType, setPlaylistType] = useState("month"); // "month"|"all"|"tag"
+  const [tagPlayMood, setTagPlayMood] = useState(null);
+  const [showTagPlay, setShowTagPlay] = useState(false);
 
   const [showAddSong, setShowAddSong] = useState(false);
-  const [editSong, setEditSong] = useState(null); // 수정 중인 곡
+  const [editSong, setEditSong] = useState(null);
   const [showThemeMgr, setShowThemeMgr] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -82,7 +71,6 @@ export default function PlaylistApp() {
   const isStandalone = window.navigator.standalone === true ||
     window.matchMedia("(display-mode: standalone)").matches;
 
-  const [showAllMoods, setShowAllMoods] = useState(false);
   const [showArchiveDrop, setShowArchiveDrop] = useState(false);
   const [editingTheme, setEditingTheme] = useState(null);
   const [editingThemeVal, setEditingThemeVal] = useState("");
@@ -92,25 +80,45 @@ export default function PlaylistApp() {
   const [themeForm, setThemeForm] = useState({month:"",theme:""});
   const [newTagInput, setNewTagInput] = useState("");
 
+  // 닉네임
+  const [nickname, setNickname] = useState(() => localStorage.getItem("cccc_nickname") || "");
+  const [showNicknameSetup, setShowNicknameSetup] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState("");
+  const [settingsNicknameInput, setSettingsNicknameInput] = useState("");
+
+  // 설정 편집 모드
+  const [themeEditMode, setThemeEditMode] = useState(false);
+  const [tagEditMode, setTagEditMode] = useState(false);
+
   const currentMonth = new Date().toISOString().slice(0,7);
   const activeMonth = selectedMonth || currentMonth;
   const months = [...new Set(songs.map(s=>s.month))].sort().reverse();
   const thisMonthSongs = songs.filter(s=>s.month===activeMonth);
-  const displaySongs = thisMonthSongs.filter(s=>!filterMood||s.mood.includes(filterMood));
 
-  // ── Firestore 실시간 리스너 ──
+  const playlistSongs = thisMonthSongs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
+  const allPlaylistSongs = songs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
+  const tagPlaylistSongs = tagPlayMood
+    ? songs.filter(s=>s.youtubeId&&s.youtubeId.length>5&&s.mood.includes(tagPlayMood))
+    : [];
+  const activeSongs = playlistType==="all" ? allPlaylistSongs
+    : playlistType==="tag" ? tagPlaylistSongs
+    : playlistSongs;
+
+  // 태그별 전체 곡 수
+  const tagCounts = {};
+  moods.forEach(m => { tagCounts[m] = songs.filter(s=>s.mood.includes(m)).length; });
+
   useEffect(() => {
-    // index.html 인라인 스크립트가 먼저 잡아둔 프롬프트 확인
+    if (!localStorage.getItem("cccc_nickname")) setShowNicknameSetup(true);
+  }, []);
+
+  useEffect(() => {
     if (window.__pwaPrompt) {
       setDeferredPrompt(window.__pwaPrompt);
       setShowInstallBtn(true);
       window.__pwaPrompt = null;
     }
-    const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBtn(true);
-    };
+    const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); setShowInstallBtn(true); };
     window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener("appinstalled", () => setShowInstallBtn(false));
     return () => window.removeEventListener("beforeinstallprompt", handler);
@@ -147,7 +155,27 @@ export default function PlaylistApp() {
 
   function toast(msg){ setNotif(msg); setTimeout(()=>setNotif(null),2500); }
 
-  // ── 곡 추가 ──
+  function saveNickname(val) {
+    const trimmed = val.trim();
+    if (!trimmed) return;
+    localStorage.setItem("cccc_nickname", trimmed);
+    setNickname(trimmed);
+  }
+
+  function handleNicknameSetup() {
+    if (!nicknameInput.trim()) { toast("닉네임을 입력해주세요!"); return; }
+    saveNickname(nicknameInput);
+    setShowNicknameSetup(false);
+    toast(`👋 환영해요, ${nicknameInput.trim()}님!`);
+  }
+
+  function openAddSong() {
+    const stored = localStorage.getItem("cccc_nickname") || "";
+    setForm({title:"",artist:"",youtubeUrl:"",mood:[],recommender:stored,comment:"",date:new Date().toISOString().slice(0,10)});
+    setInlineTag("");
+    setShowAddSong(true);
+  }
+
   async function handleAddSong() {
     if(!form.title||!form.artist||!form.recommender){ toast("제목, 가수, 추천인은 필수예요!"); return; }
     const youtubeId=extractYoutubeId(form.youtubeUrl)||"";
@@ -156,7 +184,9 @@ export default function PlaylistApp() {
     setForm({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:"",date:new Date().toISOString().slice(0,10)});
     setInlineTag(""); setShowAddSong(false); toast("🎵 곡이 추가됐어요!");
   }
+
   function toggleFormMood(m){ setForm(f=>({...f,mood:f.mood.includes(m)?f.mood.filter(x=>x!==m):[...f.mood,m]})); }
+
   async function addInlineTag(){
     const tag=inlineTag.trim(); if(!tag) return;
     if(!moods.includes(tag)){
@@ -167,24 +197,25 @@ export default function PlaylistApp() {
     setInlineTag("");
   }
 
-  // ── 연속재생 ──
-  const playlistSongs = displaySongs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
-  const allPlaylistSongs = songs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
-  const activeSongs = playlistAll ? allPlaylistSongs : playlistSongs;
-
   function startPlaylist(){
     if(playlistSongs.length===0){ toast("재생할 곡이 없어요!"); return; }
-    setPlaylistAll(false); setPlaylistMode(true); setPlaylistIdx(0);
+    setPlaylistType("month"); setPlaylistMode(true); setPlaylistIdx(0); setShowTagPlay(false);
   }
   function startPlaylistAll(){
     if(allPlaylistSongs.length===0){ toast("재생할 곡이 없어요!"); return; }
-    setPlaylistAll(true); setPlaylistMode(true); setPlaylistIdx(0);
+    setPlaylistType("all"); setPlaylistMode(true); setPlaylistIdx(0); setShowTagPlay(false);
   }
+  function startTagPlaylist(tag){
+    const tagged = songs.filter(s=>s.youtubeId&&s.youtubeId.length>5&&s.mood.includes(tag));
+    if(tagged.length===0){ toast("재생할 곡이 없어요!"); return; }
+    setTagPlayMood(tag);
+    setPlaylistType("tag"); setPlaylistMode(true); setPlaylistIdx(0); setShowTagPlay(false);
+  }
+
   function nextTrack(){ if(playlistIdx<activeSongs.length-1) setPlaylistIdx(i=>i+1); else { setPlaylistMode(false); toast("🎵 플레이리스트 재생 완료!"); } }
   function prevTrack(){ if(playlistIdx>0) setPlaylistIdx(i=>i-1); }
-  function stopPlaylist(){ setPlaylistMode(false); setPlaylistAll(false); }
+  function stopPlaylist(){ setPlaylistMode(false); setPlaylistType("month"); }
 
-  // ── 내보내기 ──
   function exportCSV(){
     const header="제목,가수,유튜브ID,무드,추천인,코멘트,날짜,연월";
     const rows=thisMonthSongs.map(s=>[
@@ -211,11 +242,7 @@ export default function PlaylistApp() {
     URL.revokeObjectURL(url); toast("⬇️ CSV 다운로드 완료!");
   }
 
-
-
-  // ── 노션 CSV 가져오기 ──
   function parseNotionCSVLine(line) {
-    // 따옴표 안의 쉼표를 보호하며 분리
     const cols = []; let cur = ""; let inQ = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
@@ -227,7 +254,6 @@ export default function PlaylistApp() {
     return cols;
   }
   function parseNotionDate(raw) {
-    // "2025년 5월 27일 오후 10:26" → "2025-05-27"
     const m = raw.match(/(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일/);
     if (m) {
       const y=m[1], mo=String(m[2]).padStart(2,"0"), d=String(m[3]).padStart(2,"0");
@@ -241,13 +267,11 @@ export default function PlaylistApp() {
     console.log("버튼 클릭됨");
     console.log("1. csvText:", csvText.slice(0,100));
     if (!csvText.trim()) { toast("CSV 내용을 붙여넣어 주세요!"); return; }
-    // BOM 제거
     const cleaned = csvText.replace(/^﻿/,"").trim();
     const lines = cleaned.split(/\r?\n/);
     console.log("2. lines:", lines.length, "/ header:", lines[0]?.slice(0,80));
     const header = parseNotionCSVLine(lines[0]);
     console.log("3. header 파싱 결과:", header);
-
     const fi = (keywords) => header.findIndex(h => keywords.some(k => h.includes(k)));
     const titleIdx   = fi(["제목","title","노래"]);
     const artistIdx  = fi(["가수","artist"]);
@@ -257,32 +281,24 @@ export default function PlaylistApp() {
     const commentIdx = fi(["한 줄","코멘트","comment"]);
     const ytIdx      = fi(["youtube","유튜브","링크","url"]);
     console.log("4. 열 인덱스:", { titleIdx, artistIdx, dateIdx, moodIdx, recIdx, commentIdx, ytIdx });
-
     if (titleIdx === -1) { toast("'제목' 열을 찾지 못했어요!"); return; }
-
     const DUMMY_KEYWORDS = ["여기부터 입력","입력해주세요","테스트","test"];
     const newMoods = new Set();
     const imported = [];
-
     for (let i = 1; i < lines.length; i++) {
       if (!lines[i].trim()) continue;
       const cols = parseNotionCSVLine(lines[i]);
       const title = cols[titleIdx] || "";
       if (!title) continue;
-      // 더미 행 걸러내기
       if (DUMMY_KEYWORDS.some(k => title.includes(k))) continue;
-
       const rawDate = dateIdx >= 0 ? cols[dateIdx] || "" : "";
       const date    = parseNotionDate(rawDate);
       const month   = date.slice(0, 7);
-
       const moodRaw = moodIdx >= 0 ? cols[moodIdx] || "" : "";
       const mood    = moodRaw ? moodRaw.split(/[,|]/).map(m=>m.trim()).filter(Boolean) : [];
       mood.forEach(m => newMoods.add(m));
-
       const rawUrl   = ytIdx >= 0 ? cols[ytIdx] || "" : "";
       const youtubeId = extractYoutubeId(rawUrl) || "";
-
       imported.push({
         id: "imp_" + Date.now() + "_" + i,
         title,
@@ -295,11 +311,8 @@ export default function PlaylistApp() {
       });
     }
     console.log("5. imported:", imported.length, "곡 / 첫 번째:", imported[0]);
-
     if (imported.length === 0) { toast("가져올 수 있는 데이터가 없어요 😢"); return; }
-
     try {
-      // 새 태그 Firestore 저장
       if (newMoods.size > 0) {
         const next = [...moods];
         newMoods.forEach(m => { if (!next.includes(m)) next.push(m); });
@@ -307,8 +320,6 @@ export default function PlaylistApp() {
         await setDoc(doc(db,"config","moods"),{list:next});
         console.log("6. 새 태그 저장 완료");
       }
-
-      // 월별 테마 자동 등록
       const themeMap = {};
       imported.forEach(s => {
         s.mood.forEach(tag => {
@@ -325,8 +336,6 @@ export default function PlaylistApp() {
         await setDoc(doc(db,"config","monthThemes"),{...monthThemes,...themeMap});
         console.log("7. 월별 테마 저장 완료");
       }
-
-      // 곡 일괄 추가
       console.log("8. Firestore addDoc 시작...");
       await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), songData)));
       console.log("9. Firestore 저장 완료!");
@@ -338,7 +347,6 @@ export default function PlaylistApp() {
     }
   }
 
-  // ── 테마/태그 관리 ──
   async function saveEditTheme(m) {
     if (!editingThemeVal.trim()) return;
     await setDoc(doc(db,"config","monthThemes"),{...monthThemes,[m]:editingThemeVal.trim()});
@@ -358,19 +366,15 @@ export default function PlaylistApp() {
     await setDoc(doc(db,"config","moods"),{list:next});
     setNewTagInput(""); toast(`✅ "${tag}" 태그 추가됨!`);
   }
-
-  // ── 삭제 ──
   async function handleDelete(id){
     if(!window.confirm("이 곡을 삭제할까요?")) return;
     await deleteDoc(doc(db,"songs",id));
     setExpandedId(null);
     toast("🗑️ 삭제됐어요!");
   }
-  // ── 수정 모달 열기 ──
   function openEdit(song){
     setEditSong({...song, youtubeUrl: song.youtubeId ? `https://youtu.be/${song.youtubeId}` : ""});
   }
-  // ── 수정 저장 ──
   async function handleEditSave(){
     if(!editSong.title||!editSong.artist||!editSong.recommender){ toast("제목, 가수, 추천인은 필수예요!"); return; }
     const youtubeId = extractYoutubeId(editSong.youtubeUrl)||editSong.youtubeId||"";
@@ -387,11 +391,32 @@ export default function PlaylistApp() {
   return (
     <div style={s.root}>
 
-      {/* ══ 헤더 (BTS 보라) ══ */}
+      {/* 닉네임 초기 설정 */}
+      {showNicknameSetup && (
+        <div style={s.overlay} onClick={e=>e.stopPropagation()}>
+          <div style={s.modal}>
+            <div style={s.modalHandle}/>
+            <h2 style={s.modalTitle}>👋 환영해요!</h2>
+            <p style={{fontSize:14,color:C.sub,marginBottom:16}}>춘천춘천 플레이리스트에서 사용할 닉네임을 입력해주세요.</p>
+            <FL>닉네임</FL>
+            <input style={s.input} placeholder="예: 춘천이"
+              value={nicknameInput} onChange={e=>setNicknameInput(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&handleNicknameSetup()} autoFocus/>
+            <div style={s.modalBtns}>
+              <button style={s.cancelBtn} onClick={()=>setShowNicknameSetup(false)}>나중에</button>
+              <button style={s.submitBtn} onClick={handleNicknameSetup}>시작하기 🎵</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 헤더 */}
       <header style={s.header}>
         <div style={s.headerInner}>
-          <button style={s.logoBtn} onClick={()=>{setSelectedMonth(null);setFilterMood(null);}}>
-            <div style={s.logoGem}>🎵</div>
+          <button style={s.logoBtn} onClick={()=>setSelectedMonth(null)}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 8v8M12 6v12M15 9v6M6 10v4M18 10v4" stroke="#5C7A3E" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
             <div>
               <div style={s.logoTitle}>춘천춘천</div>
               <div style={s.logoSub}>플레이리스트</div>
@@ -405,42 +430,71 @@ export default function PlaylistApp() {
               <button style={s.installBtn} onClick={()=>setShowIosGuide(true)}>📲 설치</button>
             )}
             <button style={s.mgmtBtn} onClick={()=>setShowThemeMgr(true)}>⚙️ 설정</button>
-            <button style={s.addBtn} onClick={()=>setShowAddSong(true)}>+ 곡 추가</button>
+            <button style={s.addBtn} onClick={openAddSong}>+ 곡 추가</button>
           </div>
         </div>
       </header>
 
       <main style={s.main}>
 
-        {/* ══ 히어로 배너 (BTS 보라 단색) ══ */}
+        {/* 히어로 배너 (곡 수 배지 제거) */}
         <div style={s.hero}>
           <div style={s.heroLeft}>
             <span style={s.heroMonth}>{getMonthLabel(activeMonth)}</span>
             <h1 style={s.heroTitle}>{monthThemes[activeMonth]||"이달의 플레이리스트"}</h1>
             {selectedMonth&&(
-              <button style={s.backBtn} onClick={()=>{setSelectedMonth(null);setFilterMood(null);}}>← 이번 달로</button>
+              <button style={s.backBtn} onClick={()=>setSelectedMonth(null)}>← 이번 달로</button>
             )}
           </div>
-          <div style={s.heroBadge}>{thisMonthSongs.length}<span style={{fontSize:14,fontWeight:600,marginLeft:2}}>곡</span></div>
         </div>
 
-        {/* ══ 연속재생 바 (SHINee 블루) ══ */}
+        {/* 재생 바 개편 */}
         <div style={s.playbar}>
-          <span style={s.playbarText}>🎶 {getMonthLabel(activeMonth)} · {playlistSongs.length}곡</span>
-          <div style={{display:"flex",gap:8}}>
-            <button style={s.playbarBtn} onClick={startPlaylist}>▶ 이번 달</button>
-            <button style={{...s.playbarBtn,background:C.shineMid}} onClick={startPlaylistAll}>▶ 전체 ({allPlaylistSongs.length})</button>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",width:"100%"}}>
+            <button
+              style={{...s.playbarBtn,...(playlistMode&&playlistType==="month"?s.playbarBtnActive:{})}}
+              onClick={startPlaylist}>
+              ▶ 이번 달 <span style={s.playbarCount}>({playlistSongs.length}곡)</span>
+            </button>
+            <button
+              style={{...s.playbarBtn,...(playlistMode&&playlistType==="all"?s.playbarBtnActive:{})}}
+              onClick={startPlaylistAll}>
+              ▶ 전체 <span style={s.playbarCount}>({allPlaylistSongs.length}곡)</span>
+            </button>
+            <button
+              style={{...s.playbarBtn,...(showTagPlay||playlistType==="tag"?s.playbarBtnActive:{})}}
+              onClick={()=>setShowTagPlay(v=>!v)}>
+              🏷️ 태그로 듣기
+            </button>
           </div>
+          {showTagPlay && (
+            <div style={{width:"100%",marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {moods.filter(m=>tagCounts[m]>0).map(m=>(
+                  <button key={m}
+                    style={{...tagStyle(m,moods), cursor:"pointer", padding:"6px 13px", fontSize:13,
+                      outline: playlistMode&&playlistType==="tag"&&tagPlayMood===m?`2px solid ${tagColor(m,moods)}`:"none",
+                      outlineOffset:2}}
+                    onClick={()=>startTagPlaylist(m)}>
+                    {m} <span style={{fontWeight:500,opacity:0.75}}>{tagCounts[m]}</span>
+                  </button>
+                ))}
+              </div>
+              <button style={{...s.cancelBtn,marginTop:10,padding:"6px 14px",fontSize:12,width:"auto",display:"inline-block"}}
+                onClick={()=>setShowTagPlay(false)}>접기</button>
+            </div>
+          )}
         </div>
 
-        {/* ══ 연속재생 플레이어 ══ */}
+        {/* 연속재생 플레이어 */}
         {playlistMode && activeSongs.length>0 && (
           <div style={s.playerCard}>
             <div style={s.playerHeader}>
               <div>
                 <div style={s.playerTitle}>{activeSongs[playlistIdx].title}</div>
                 <div style={s.playerArtist}>{activeSongs[playlistIdx].artist} · {activeSongs[playlistIdx].recommender}
-                  {playlistAll && <span style={{marginLeft:6,fontSize:11,color:C.shine,fontWeight:700}}>전체재생</span>}
+                  {playlistType==="all"&&<span style={{marginLeft:6,fontSize:11,color:C.accent,fontWeight:700}}>전체재생</span>}
+                  {playlistType==="tag"&&<span style={{marginLeft:6,fontSize:11,color:C.accent,fontWeight:700}}>#{tagPlayMood}</span>}
                 </div>
               </div>
               <button style={s.playerClose} onClick={stopPlaylist}>✕</button>
@@ -462,34 +516,12 @@ export default function PlaylistApp() {
           </div>
         )}
 
-        {/* ══ 무드 필터 (BTS 보라 active) ══ */}
-        {(()=>{
-          const allItems=["전체",...moods];
-          const visible=showAllMoods?allItems:allItems.slice(0,5);
-          return (
-            <div style={{...s.chipRow,flexWrap:showAllMoods?"wrap":"nowrap"}}>
-              {visible.map(m=>{
-                const isAll=m==="전체"; const active=isAll?filterMood===null:filterMood===m;
-                return (
-                  <button key={m} style={{...s.chip,...(active?s.chipActive:{})}}
-                    onClick={()=>setFilterMood(isAll?null:(filterMood===m?null:m))}>
-                    {!isAll&&<span style={{...s.chipDot,background:tagColor(m,moods)}}/>}{m}
-                  </button>
-                );
-              })}
-              <button style={s.moodToggleBtn} onClick={()=>setShowAllMoods(v=>!v)}>
-                {showAllMoods?"접기 −":"더보기 +"}
-              </button>
-            </div>
-          );
-        })()}
-
-        {/* ══ 곡 목록 ══ */}
+        {/* 곡 목록 (무드 필터 제거 — 전월 포함 thisMonthSongs 표시) */}
         <div style={s.list}>
-          {displaySongs.length===0&&(
+          {thisMonthSongs.length===0&&(
             <div style={s.empty}><div style={{fontSize:40}}>🎶</div><div style={{marginTop:10}}>아직 곡이 없어요</div></div>
           )}
-          {displaySongs.map((song,i)=>(
+          {thisMonthSongs.map((song,i)=>(
             <SongRow key={song.id} song={song} index={i+1} moods={moods}
               expanded={expandedId===song.id} playing={playingId===song.id}
               onToggle={()=>{setExpandedId(expandedId===song.id?null:song.id); if(playingId===song.id)setPlayingId(null);}}
@@ -498,7 +530,7 @@ export default function PlaylistApp() {
           ))}
         </div>
 
-        {/* ══ 아카이브 드롭다운 ══ */}
+        {/* 아카이브 드롭다운 */}
         {months.filter(m=>m!==currentMonth).length>0&&(
           <section style={s.archive}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -514,9 +546,9 @@ export default function PlaylistApp() {
                   const active=selectedMonth===m;
                   return (
                     <button key={m} style={{...s.archiveDropItem,...(active?s.archiveDropItemActive:{})}}
-                      onClick={()=>{setSelectedMonth(active?null:m);setFilterMood(null);setShowArchiveDrop(false);window.scrollTo({top:0,behavior:"smooth"});}}>
+                      onClick={()=>{setSelectedMonth(active?null:m);setShowArchiveDrop(false);window.scrollTo({top:0,behavior:"smooth"});}}>
                       <span style={{fontWeight:700,fontSize:14,color:active?"#fff":C.text}}>{getMonthLabel(m)}</span>
-                      {monthThemes[m]&&<span style={{fontSize:12,color:active?C.shineLight:C.shine}}>{monthThemes[m]}</span>}
+                      {monthThemes[m]&&<span style={{fontSize:12,color:active?C.accentBg:C.accent}}>{monthThemes[m]}</span>}
                       <span style={{fontSize:12,color:active?"rgba(255,255,255,0.7)":C.sub,marginLeft:"auto"}}>{cnt}곡</span>
                     </button>
                   );
@@ -527,7 +559,7 @@ export default function PlaylistApp() {
         )}
       </main>
 
-      {/* ══ 곡 추가 모달 ══ */}
+      {/* 곡 추가 모달 */}
       {showAddSong&&(
         <Modal onClose={()=>setShowAddSong(false)}>
           <h2 style={s.modalTitle}>🎵 새 곡 추가</h2>
@@ -580,23 +612,18 @@ export default function PlaylistApp() {
         </Modal>
       )}
 
-      {/* ══ 내보내기 모달 (SHINee 블루 포인트) ══ */}
+      {/* 내보내기 모달 */}
       {showExport&&(
         <Modal onClose={()=>setShowExport(false)}>
-          <h2 style={{...s.modalTitle,color:C.shine}}>⬆ 내보내기</h2>
+          <h2 style={{...s.modalTitle,color:C.accent}}>⬆ 내보내기</h2>
           <p style={{fontSize:13,color:C.sub,marginBottom:16}}>{getMonthLabel(activeMonth)} · {thisMonthSongs.length}곡</p>
-
           <div style={s.exportGrid}>
-            <ExportCard icon="📊" title="CSV 다운로드" desc="엑셀·노션에 바로 붙여넣기" color={C.shine}
-              onClick={downloadCSV}/>
-            <ExportCard icon="📋" title="텍스트 복사" desc="단톡방·메모 공유용" color={C.shineMid}
-              onClick={()=>copyToClipboard(exportText())}/>
-            <ExportCard icon="🔗" title="링크 목록 복사" desc="유튜브 링크만 모아서" color={C.bts}
-              onClick={()=>copyToClipboard(exportLinks())}/>
+            <ExportCard icon="📊" title="CSV 다운로드" desc="엑셀·노션에 바로 붙여넣기" color={C.accent} onClick={downloadCSV}/>
+            <ExportCard icon="📋" title="텍스트 복사" desc="단톡방·메모 공유용" color={C.sub} onClick={()=>copyToClipboard(exportText())}/>
+            <ExportCard icon="🔗" title="링크 목록 복사" desc="유튜브 링크만 모아서" color={C.text} onClick={()=>copyToClipboard(exportLinks())}/>
           </div>
-
-          <div style={{marginTop:16,background:C.shineBg,borderRadius:12,padding:14}}>
-            <div style={{fontSize:12,color:C.shine,fontWeight:700,marginBottom:8}}>미리보기</div>
+          <div style={{marginTop:16,background:C.accentBg,borderRadius:12,padding:14}}>
+            <div style={{fontSize:12,color:C.accent,fontWeight:700,marginBottom:8}}>미리보기</div>
             <pre style={{fontSize:11,color:C.sub,overflow:"auto",maxHeight:120,margin:0,whiteSpace:"pre-wrap"}}>
               {exportText().slice(0,300)}{exportText().length>300?"...":""}
             </pre>
@@ -605,11 +632,10 @@ export default function PlaylistApp() {
         </Modal>
       )}
 
-      {/* ══ 가져오기 모달 (노션 CSV) ══ */}
+      {/* 가져오기 모달 */}
       {showImport&&(
         <Modal onClose={()=>setShowImport(false)}>
-          <h2 style={{...s.modalTitle,color:C.shine}}>⬇ 노션 CSV 가져오기</h2>
-
+          <h2 style={{...s.modalTitle,color:C.accent}}>⬇ 노션 CSV 가져오기</h2>
           <div style={s.importGuide}>
             <p style={{fontWeight:700,fontSize:14,marginBottom:8}}>📌 노션에서 내보내는 방법</p>
             <ol style={{fontSize:13,color:C.sub,lineHeight:2,paddingLeft:18,margin:0}}>
@@ -620,30 +646,53 @@ export default function PlaylistApp() {
               <li>아래에 붙여넣기</li>
             </ol>
           </div>
-
           <FL>CSV 내용 붙여넣기</FL>
           <textarea style={{...s.textarea,minHeight:140,fontFamily:"monospace",fontSize:12}}
             placeholder={"제목,가수,유튜브 링크,무드,추천한 사람,한 줄 코멘트,날짜\nSELFISH,..."}
             value={csvText} onChange={e=>setCsvText(e.target.value)}/>
-
           <div style={{fontSize:12,color:C.sub,marginTop:8,lineHeight:1.6}}>
             💡 열 이름에 <b>제목/title, 가수/artist, 링크/url</b> 등이 포함되면 자동 인식해요.
           </div>
-
           <div style={s.modalBtns}>
             <button style={s.cancelBtn} onClick={()=>setShowImport(false)}>취소</button>
-            <button style={{...s.submitBtn,background:`linear-gradient(135deg,${C.shine},${C.shineMid})`}}
-              onClick={handleImportCSV}>가져오기 ✅</button>
+            <button style={{...s.submitBtn,background:C.sub}} onClick={handleImportCSV}>가져오기 ✅</button>
           </div>
         </Modal>
       )}
 
-      {/* ══ 테마·태그 관리 모달 ══ */}
+      {/* 설정 모달 */}
       {showThemeMgr&&(
         <Modal onClose={()=>setShowThemeMgr(false)}>
-          <h2 style={s.modalTitle}>⚙️ 테마 & 태그 관리</h2>
+          <h2 style={s.modalTitle}>⚙️ 설정</h2>
+
+          {/* 닉네임 변경 */}
           <div style={s.mgmtBox}>
-            <h3 style={s.mgmtSub}>📅 월별 테마 설정</h3>
+            <h3 style={s.mgmtSub}>👤 내 닉네임</h3>
+            <div style={{fontSize:14,color:C.text,marginBottom:10}}>
+              현재: <strong style={{color:C.accent}}>{nickname||"미설정"}</strong>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <input style={{...s.input,flex:1}} placeholder="새 닉네임"
+                value={settingsNicknameInput} onChange={e=>setSettingsNicknameInput(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&settingsNicknameInput.trim()){saveNickname(settingsNicknameInput);setSettingsNicknameInput("");toast("✅ 닉네임이 변경됐어요!");}}}/>
+              <button style={s.submitBtn} onClick={()=>{
+                if(!settingsNicknameInput.trim()){toast("닉네임을 입력해주세요!");return;}
+                saveNickname(settingsNicknameInput);
+                setSettingsNicknameInput("");
+                toast("✅ 닉네임이 변경됐어요!");
+              }}>변경</button>
+            </div>
+          </div>
+
+          {/* 월별 테마 */}
+          <div style={s.mgmtBox}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <h3 style={{...s.mgmtSub,marginBottom:0}}>📅 월별 테마 설정</h3>
+              <button style={themeEditMode?s.editActiveBtn:s.editToggleBtn}
+                onClick={()=>setThemeEditMode(v=>!v)}>
+                {themeEditMode?"완료":"편집"}
+              </button>
+            </div>
             {Object.entries(monthThemes).sort().reverse().map(([m,theme])=>(
               <div key={m} style={s.themeRow}>
                 <span style={{fontWeight:700,fontSize:14,minWidth:80,color:C.text}}>{getMonthLabel(m)}</span>
@@ -658,9 +707,11 @@ export default function PlaylistApp() {
                   </>
                 ) : (
                   <>
-                    <span style={{flex:1,fontSize:13,color:C.bts,fontWeight:600}}>{theme}</span>
-                    <button style={s.delBtn} onClick={()=>{setEditingTheme(m);setEditingThemeVal(theme);}}>✏️</button>
-                    <button style={s.delBtn} onClick={async()=>{const n={...monthThemes};delete n[m];await setDoc(doc(db,"config","monthThemes"),n);}}>✕</button>
+                    <span style={{flex:1,fontSize:13,color:C.accent,fontWeight:600}}>{theme}</span>
+                    {themeEditMode&&<>
+                      <button style={s.delBtn} onClick={()=>{setEditingTheme(m);setEditingThemeVal(theme);}}>✏️</button>
+                      <button style={s.delBtn} onClick={async()=>{const n={...monthThemes};delete n[m];await setDoc(doc(db,"config","monthThemes"),n);}}>✕</button>
+                    </>}
                   </>
                 )}
               </div>
@@ -673,13 +724,23 @@ export default function PlaylistApp() {
               <button style={s.submitBtn} onClick={saveTheme}>저장</button>
             </div>
           </div>
+
+          {/* 무드 태그 */}
           <div style={s.mgmtBox}>
-            <h3 style={s.mgmtSub}>🏷️ 무드 태그 관리</h3>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <h3 style={{...s.mgmtSub,marginBottom:0}}>🏷️ 무드 태그 관리</h3>
+              <button style={tagEditMode?s.editActiveBtn:s.editToggleBtn}
+                onClick={()=>setTagEditMode(v=>!v)}>
+                {tagEditMode?"완료":"편집"}
+              </button>
+            </div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
               {moods.map(m=>(
                 <div key={m} style={{display:"flex",alignItems:"center",gap:2}}>
                   <span style={tagStyle(m,moods)}>{m}</span>
-                  <button style={s.delBtn} onClick={async()=>{const next=moods.filter(x=>x!==m);await setDoc(doc(db,"config","moods"),{list:next});}}>✕</button>
+                  {tagEditMode&&(
+                    <button style={s.delBtn} onClick={async()=>{const next=moods.filter(x=>x!==m);await setDoc(doc(db,"config","moods"),{list:next});}}>✕</button>
+                  )}
                 </div>
               ))}
             </div>
@@ -690,12 +751,14 @@ export default function PlaylistApp() {
               <button style={s.submitBtn} onClick={addGlobalTag}>추가</button>
             </div>
           </div>
+
+          {/* 내보내기/가져오기 */}
           <div style={s.mgmtBox}>
             <h3 style={s.mgmtSub}>📤 내보내기 / 가져오기</h3>
             <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
               <button style={{...s.blueBtn,flex:1,borderRadius:12,padding:"12px 0",fontSize:14}}
                 onClick={()=>{setShowThemeMgr(false);setShowExport(true);}}>⬆ 내보내기</button>
-              <button style={{...s.blueBtn,flex:1,borderRadius:12,padding:"12px 0",fontSize:14,background:C.shineMid}}
+              <button style={{...s.blueBtn,flex:1,borderRadius:12,padding:"12px 0",fontSize:14,background:C.sub}}
                 onClick={()=>{setShowThemeMgr(false);setShowImport(true);}}>⬇ 노션 가져오기</button>
             </div>
           </div>
@@ -703,7 +766,7 @@ export default function PlaylistApp() {
         </Modal>
       )}
 
-      {/* ══ 수정 모달 ══ */}
+      {/* 수정 모달 */}
       {editSong&&(
         <Modal onClose={()=>setEditSong(null)}>
           <h2 style={s.modalTitle}>✏️ 곡 수정</h2>
@@ -751,6 +814,7 @@ export default function PlaylistApp() {
         </Modal>
       )}
 
+      {/* iOS 설치 가이드 */}
       {showIosGuide&&(
         <Modal onClose={()=>setShowIosGuide(false)}>
           <h2 style={s.modalTitle}>📲 홈 화면에 추가하기</h2>
@@ -790,7 +854,6 @@ export default function PlaylistApp() {
   );
 }
 
-// ── 내보내기 카드 ────────────────────────────────────────────────
 function ExportCard({icon,title,desc,color,onClick}){
   return (
     <button style={{...s.exportCard,borderColor:color+"44"}} onClick={onClick}>
@@ -803,21 +866,29 @@ function ExportCard({icon,title,desc,color,onClick}){
   );
 }
 
-// ── 공통 컴포넌트 ────────────────────────────────────────────────
 function Modal({children,onClose}){
+  const touchStartY = useRef(null);
+  function handleTouchStart(e){ touchStartY.current = e.touches[0].clientY; }
+  function handleTouchEnd(e){
+    if(touchStartY.current===null) return;
+    const delta = e.changedTouches[0].clientY - touchStartY.current;
+    if(delta>50) onClose();
+    touchStartY.current = null;
+  }
   return (
     <div style={s.overlay} onClick={onClose}>
-      <div style={s.modal} onClick={e=>e.stopPropagation()}>
+      <div style={s.modal} onClick={e=>e.stopPropagation()}
+        onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <div style={s.modalHandle}/>{children}
       </div>
     </div>
   );
 }
+
 function FL({children}){
   return <label style={{display:"block",fontSize:13,color:C.sub,marginBottom:5,marginTop:14,fontWeight:700}}>{children}</label>;
 }
 
-// ── 곡 행 ────────────────────────────────────────────────────────
 function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDelete}){
   const hasThumb=song.youtubeId&&song.youtubeId.length>5;
   const thumbUrl=hasThumb?`https://img.youtube.com/vi/${song.youtubeId}/mqdefault.jpg`:null;
@@ -877,7 +948,6 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
             <span>👤 {song.recommender}</span>
             <span>{song.date}</span>
           </div>
-          {/* 수정 / 삭제 버튼 */}
           <div style={{display:"flex",gap:8,marginTop:12}}>
             <button style={s.editBtn} onClick={e=>{e.stopPropagation();onEdit(song);}}>✏️ 수정</button>
             <button style={s.deleteBtn} onClick={e=>{e.stopPropagation();onDelete(song.id);}}>🗑️ 삭제</button>
@@ -888,7 +958,7 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
     </div>
   );
 }
-// ── 반응 / 댓글 ─────────────────────────────────────────────────
+
 const EMOJI_LIST = ['👍','😍','🎵','🔥','ㅠㅠ'];
 
 function ReactionSection({ songId }) {
@@ -937,7 +1007,6 @@ function ReactionSection({ songId }) {
 
   return (
     <div style={{borderTop:`1px solid ${C.border}`,marginTop:14,paddingTop:14}}>
-      {/* 이모지 반응 */}
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
         {EMOJI_LIST.map(emoji => {
           const active = myEmojis.includes(emoji);
@@ -954,7 +1023,6 @@ function ReactionSection({ songId }) {
           );
         })}
       </div>
-      {/* 댓글 목록 */}
       {comments.length>0&&(
         <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:6}}>
           {comments.map(c=>(
@@ -970,7 +1038,6 @@ function ReactionSection({ songId }) {
           ))}
         </div>
       )}
-      {/* 댓글 입력 */}
       <div style={{display:'flex',gap:6,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
         <input style={{...s.input,width:70,flexShrink:0,padding:'7px 10px',fontSize:13}}
           placeholder="닉네임" value={nickname} onChange={e=>setNickname(e.target.value)}/>
@@ -985,29 +1052,27 @@ function ReactionSection({ songId }) {
   );
 }
 
-// ── 스타일 ───────────────────────────────────────────────────────
 const s = {
   root:{ minHeight:"100vh", background:C.bg, colorScheme:"light", fontFamily:"'Noto Sans KR','Apple SD Gothic Neo',sans-serif", color:C.text },
-  header:{ position:"sticky",top:0,zIndex:100,background:"rgba(250,248,244,0.96)",backdropFilter:"blur(14px)",borderBottom:`1px solid ${C.border}` },
+  header:{ position:"sticky",top:0,zIndex:100,background:"rgba(240,244,232,0.96)",backdropFilter:"blur(14px)",borderBottom:`1px solid ${C.border}` },
   headerInner:{ maxWidth:700,margin:"0 auto",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8 },
   logoBtn:{ background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:10,padding:0 },
-  logoGem:{ fontSize:26 },
   logoTitle:{ fontSize:18,fontWeight:900,color:C.text,lineHeight:1.1 },
   logoSub:{ fontSize:11,color:C.sub,letterSpacing:1 },
   addBtn:{ background:C.accent,border:"none",borderRadius:22,padding:"8px 16px",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer" },
-  installBtn:{ background:C.shine,border:"none",borderRadius:22,padding:"8px 16px",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer" },
+  installBtn:{ background:C.accent,border:"none",borderRadius:22,padding:"8px 16px",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer" },
   blueBtn:{ background:C.accent,border:"none",borderRadius:22,padding:"8px 14px",color:"#fff",fontWeight:700,fontSize:12,cursor:"pointer" },
   mgmtBtn:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:22,padding:"8px 12px",color:C.sub,fontWeight:600,fontSize:13,cursor:"pointer" },
   main:{ maxWidth:700,margin:"0 auto",padding:"0 16px 60px" },
-  hero:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:16,padding:"24px 20px 20px",margin:"18px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start" },
+  hero:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:16,padding:"24px 20px 20px",margin:"18px 0 0" },
   heroLeft:{ display:"flex",flexDirection:"column",alignItems:"flex-start" },
   heroMonth:{ fontSize:12,color:C.sub,fontWeight:600,letterSpacing:1 },
   heroTitle:{ fontSize:22,fontWeight:900,margin:"4px 0 4px",color:C.text },
   backBtn:{ background:C.bg3,border:`1px solid ${C.border}`,borderRadius:12,padding:"4px 12px",color:C.sub,fontSize:12,cursor:"pointer",fontWeight:700 },
-  heroBadge:{ fontSize:40,fontWeight:900,color:C.accent,lineHeight:1,display:"flex",alignItems:"baseline" },
-  playbar:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",margin:"12px 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8 },
-  playbarText:{ fontSize:14,fontWeight:600,color:C.accent },
-  playbarBtn:{ background:C.accent,border:"none",borderRadius:20,padding:"7px 16px",color:"#fff",fontWeight:800,fontSize:13,cursor:"pointer" },
+  playbar:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",margin:"12px 0",display:"flex",flexDirection:"column",gap:0 },
+  playbarBtn:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:"7px 16px",color:C.accent,fontWeight:700,fontSize:13,cursor:"pointer" },
+  playbarBtnActive:{ background:C.accent,border:`1px solid ${C.accent}`,color:"#fff" },
+  playbarCount:{ fontWeight:500,opacity:0.8,fontSize:12 },
   playerCard:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:16,padding:16,marginBottom:16 },
   playerHeader:{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10 },
   playerTitle:{ fontWeight:800,fontSize:15,color:C.text },
@@ -1019,7 +1084,6 @@ const s = {
   playerNavBtn:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 16px",color:C.accent,fontWeight:700,fontSize:13,cursor:"pointer" },
   playerCounter:{ fontSize:13,color:C.sub,fontWeight:600 },
   chipRow:{ display:"flex",flexWrap:"wrap",gap:7,margin:"14px 0 4px" },
-  moodToggleBtn:{ flexShrink:0,background:"none",border:`1px solid ${C.border}`,borderRadius:20,color:C.accent,fontSize:12,fontWeight:700,cursor:"pointer",padding:"5px 10px",whiteSpace:"nowrap" },
   chip:{ background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:"5px 12px",color:C.sub,fontSize:13,cursor:"pointer",fontWeight:500,display:"flex",alignItems:"center",gap:5 },
   chipActive:{ background:C.accent,border:`1px solid ${C.accent}`,color:"#fff",fontWeight:700 },
   chipDot:{ width:7,height:7,borderRadius:"50%",flexShrink:0 },
@@ -1049,7 +1113,7 @@ const s = {
   archiveDropList:{ marginTop:10,border:`1px solid ${C.border}`,borderRadius:14,background:C.white,maxHeight:260,overflowY:"auto" },
   archiveDropItem:{ width:"100%",padding:"12px 16px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:"none",border:"none",borderBottom:`1px solid ${C.border}` },
   archiveDropItemActive:{ background:C.accent },
-  overlay:{ position:"fixed",inset:0,zIndex:200,background:"rgba(44,42,37,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center" },
+  overlay:{ position:"fixed",inset:0,zIndex:200,background:"rgba(37,43,30,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center" },
   modal:{ background:C.bg,borderRadius:"22px 22px 0 0",padding:"20px 20px 40px",width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto" },
   modalHandle:{ width:36,height:4,background:C.border,borderRadius:2,margin:"0 auto 16px" },
   modalTitle:{ fontSize:18,fontWeight:900,marginBottom:4,color:C.text },
@@ -1067,6 +1131,8 @@ const s = {
   mgmtSub:{ fontSize:15,fontWeight:800,marginBottom:10,color:C.text },
   themeRow:{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${C.border}` },
   delBtn:{ background:"none",border:"none",color:C.sub,fontSize:13,cursor:"pointer",padding:"2px 6px",fontWeight:700 },
+  editToggleBtn:{ background:"none",border:`1px solid ${C.border}`,borderRadius:14,padding:"4px 12px",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer" },
+  editActiveBtn:{ background:C.accent,border:`1px solid ${C.accent}`,borderRadius:14,padding:"4px 12px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer" },
   toast:{ position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:C.text,borderRadius:20,padding:"12px 24px",color:"#fff",fontSize:14,fontWeight:700,zIndex:300,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,0.2)" },
   iosStep:{ display:"flex",alignItems:"flex-start",gap:14,padding:"12px 14px",background:C.bg2,borderRadius:12 },
   iosNum:{ width:28,height:28,borderRadius:"50%",background:C.accent,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:14,flexShrink:0 },
