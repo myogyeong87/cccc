@@ -108,6 +108,10 @@ export default function PlaylistApp() {
   const tagCounts = {};
   moods.forEach(m => { tagCounts[m] = songs.filter(s=>s.mood.includes(m)).length; });
 
+  const ytPlayerRef = useRef(null);
+  const nextTrackRef = useRef(null);
+  const currentVideoId = playlistMode && activeSongs.length > 0 ? (activeSongs[playlistIdx]?.youtubeId ?? null) : null;
+
   useEffect(() => {
     if (!localStorage.getItem("cccc_nickname")) setShowNicknameSetup(true);
   }, []);
@@ -152,6 +156,47 @@ export default function PlaylistApp() {
   }, []);
 
   useEffect(()=>{ setPreviewId(form.youtubeUrl?extractYoutubeId(form.youtubeUrl):null); },[form.youtubeUrl]);
+
+  useEffect(() => { nextTrackRef.current = nextTrack; });
+
+  useEffect(() => {
+    if (!document.querySelector('script[src="https://www.youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentVideoId) {
+      if (ytPlayerRef.current) {
+        try { ytPlayerRef.current.destroy(); } catch (e) {}
+        ytPlayerRef.current = null;
+      }
+      return;
+    }
+    function initPlayer() {
+      if (ytPlayerRef.current) {
+        ytPlayerRef.current.loadVideoById(currentVideoId);
+        return;
+      }
+      ytPlayerRef.current = new window.YT.Player('yt-playlist-player', {
+        videoId: currentVideoId,
+        playerVars: { autoplay: 1, rel: 0 },
+        events: {
+          onStateChange(e) {
+            if (e.data === window.YT.PlayerState.ENDED) nextTrackRef.current?.();
+          }
+        }
+      });
+    }
+    if (window.YT?.Player) {
+      initPlayer();
+    } else {
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (typeof prev === 'function') prev(); initPlayer(); };
+    }
+  }, [currentVideoId]);
 
   function toast(msg){ setNotif(msg); setTimeout(()=>setNotif(null),2500); }
 
@@ -502,11 +547,7 @@ export default function PlaylistApp() {
               <button style={s.playerClose} onClick={stopPlaylist}>✕</button>
             </div>
             <div style={s.playerWrap}>
-              <iframe
-                key={activeSongs[playlistIdx].youtubeId}
-                src={`https://www.youtube.com/embed/${activeSongs[playlistIdx].youtubeId}?autoplay=1`}
-                style={s.iframe} allow="autoplay; encrypted-media" allowFullScreen
-                title={activeSongs[playlistIdx].title}/>
+              <div id="yt-playlist-player" style={{width:"100%",height:"100%"}}/>
             </div>
             <div style={s.playerControls}>
               <button style={s.playerNavBtn} onClick={prevTrack} disabled={playlistIdx===0}>⏮ 이전</button>
