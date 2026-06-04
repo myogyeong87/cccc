@@ -393,21 +393,19 @@ export default function PlaylistApp() {
 
       {/* 닉네임 초기 설정 */}
       {showNicknameSetup && (
-        <div style={s.overlay} onClick={e=>e.stopPropagation()}>
-          <div style={s.modal}>
-            <div style={s.modalHandle}/>
-            <h2 style={s.modalTitle}>👋 환영해요!</h2>
-            <p style={{fontSize:14,color:C.sub,marginBottom:16}}>춘천춘천 플레이리스트에서 사용할 닉네임을 입력해주세요.</p>
-            <FL>닉네임</FL>
-            <input style={s.input} placeholder="예: 춘천이"
-              value={nicknameInput} onChange={e=>setNicknameInput(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&handleNicknameSetup()} autoFocus/>
-            <div style={s.modalBtns}>
-              <button style={s.cancelBtn} onClick={()=>setShowNicknameSetup(false)}>나중에</button>
-              <button style={s.submitBtn} onClick={handleNicknameSetup}>시작하기 🎵</button>
-            </div>
+        <Modal onClose={()=>setShowNicknameSetup(false)}>
+          <h2 style={s.modalTitle}>👋 환영해요!</h2>
+          <p style={{fontSize:14,color:C.sub,marginBottom:4}}>춘천춘천 플레이리스트에 오신 걸 환영해요.</p>
+          <p style={{fontSize:13,color:C.sub,marginBottom:16}}>곡 추가할 때 쓸 닉네임을 입력해주세요.<br/>지금 건너뛰고 나중에 설정에서 바꿔도 돼요.</p>
+          <FL>닉네임</FL>
+          <input style={s.input} placeholder="예: 춘천이"
+            value={nicknameInput} onChange={e=>setNicknameInput(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&handleNicknameSetup()} autoFocus/>
+          <div style={s.modalBtns}>
+            <button style={s.cancelBtn} onClick={()=>setShowNicknameSetup(false)}>나중에</button>
+            <button style={s.submitBtn} onClick={handleNicknameSetup}>시작하기 🎵</button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* 헤더 */}
