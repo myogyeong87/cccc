@@ -923,20 +923,9 @@ function ExportCard({icon,title,desc,color,onClick}){
 }
 
 function Modal({children,onClose}){
-  const touchStartY = useRef(null);
-  function handleTouchStart(e){ touchStartY.current = e.touches[0].clientY; }
-  function handleTouchEnd(e){
-    if(touchStartY.current===null) return;
-    const delta = e.changedTouches[0].clientY - touchStartY.current;
-    const active = document.activeElement;
-    const isInput = active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA';
-    if(delta>150 && !isInput) onClose();
-    touchStartY.current = null;
-  }
   return (
     <div style={s.overlay} onClick={onClose}>
-      <div style={s.modal} onClick={e=>e.stopPropagation()}
-        onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      <div style={s.modal} onClick={e=>e.stopPropagation()}>
         <div style={s.modalHandle}/>{children}
       </div>
     </div>
