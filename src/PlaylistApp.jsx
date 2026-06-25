@@ -928,7 +928,9 @@ function Modal({children,onClose}){
   function handleTouchEnd(e){
     if(touchStartY.current===null) return;
     const delta = e.changedTouches[0].clientY - touchStartY.current;
-    if(delta>50) onClose();
+    const active = document.activeElement;
+    const isInput = active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA';
+    if(delta>150 && !isInput) onClose();
     touchStartY.current = null;
   }
   return (
@@ -958,7 +960,7 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
             :<div style={s.rowThumbEmpty}>♪</div>}
         </div>
         <div style={s.rowInfo}>
-          <div style={s.rowTitle}>{song.title}</div>
+          <div style={expanded ? s.rowTitleExpanded : s.rowTitle}>{song.title}</div>
           <div style={s.rowArtist}>{song.artist} · <span style={{color:C.accent,fontWeight:600}}>{song.recommender}</span></div>
         </div>
         {song.mood[0]&&<span style={tagStyle(song.mood[0],moods)}>{song.mood[0]}</span>}
@@ -1152,7 +1154,8 @@ const s = {
   rowThumbImg:{ width:"100%",height:"100%",objectFit:"cover" },
   rowThumbEmpty:{ width:"100%",height:"100%",background:C.bg2,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:20 },
   rowInfo:{ flex:1,minWidth:0 },
-  rowTitle:{ fontWeight:700,fontSize:15,color:C.text,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" },
+  rowTitle:{ fontWeight:700,fontSize:15,color:C.text,whiteSpace:"normal",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical" },
+  rowTitleExpanded:{ fontWeight:700,fontSize:15,color:C.text,whiteSpace:"normal" },
   rowArtist:{ fontSize:12,color:C.sub,marginTop:2 },
   chevron:{ fontSize:10,color:C.border,flexShrink:0 },
   rowDetail:{ padding:"0 14px 16px",borderTop:`1px solid ${C.border}` },
