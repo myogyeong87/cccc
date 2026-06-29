@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase";
 import {
-  collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy
+  collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp
 } from "firebase/firestore";
 
 const C = {
@@ -140,7 +140,14 @@ export default function PlaylistApp() {
   useEffect(() => {
     const unsubSongs = onSnapshot(collection(db, "songs"), snapshot => {
       const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) => b.date.localeCompare(a.date));
+      data.sort((a, b) => {
+        const getMs = (s) => s.createdAt?.toMillis?.() ?? (s.createdAt?.seconds ? s.createdAt.seconds * 1000 : null);
+        const aMs = getMs(a), bMs = getMs(b);
+        if (aMs !== null && bMs !== null) return bMs - aMs;
+        if (aMs !== null) return -1;
+        if (bMs !== null) return 1;
+        return b.date.localeCompare(a.date);
+      });
       setSongs(data);
     });
     const unsubThemes = onSnapshot(doc(db, "config", "monthThemes"), snapshot => {
@@ -240,7 +247,7 @@ export default function PlaylistApp() {
     if(!form.title||!form.artist||!form.recommender){ toast("제목, 가수, 추천인은 필수예요!"); return; }
     const youtubeId=extractYoutubeId(form.youtubeUrl)||"";
     const date=form.date||new Date().toISOString().slice(0,10);
-    await addDoc(collection(db,"songs"),{title:form.title,artist:form.artist,youtubeId,mood:form.mood,recommender:form.recommender,comment:form.comment,date,month:date.slice(0,7)});
+    await addDoc(collection(db,"songs"),{title:form.title,artist:form.artist,youtubeId,mood:form.mood,recommender:form.recommender,comment:form.comment,date,month:date.slice(0,7),createdAt:serverTimestamp()});
     setForm({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:"",date:new Date().toISOString().slice(0,10)});
     setInlineTag(""); setShowAddSong(false); toast("🎵 곡이 추가됐어요!");
   }
@@ -397,7 +404,7 @@ export default function PlaylistApp() {
         console.log("7. 월별 테마 저장 완료");
       }
       console.log("8. Firestore addDoc 시작...");
-      await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), songData)));
+      await Promise.all(imported.map(({id, ...songData}) => addDoc(collection(db,"songs"), {...songData, createdAt: serverTimestamp()})));
       console.log("9. Firestore 저장 완료!");
       setCsvText(""); setShowImport(false);
       toast(`✅ ${imported.length}곡 가져오기 완료!`);
