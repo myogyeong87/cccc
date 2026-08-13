@@ -1159,7 +1159,7 @@ function ReactionSection({ songId }) {
                   <span style={{color:C.text}}>{c.text}</span>
                   <span style={{marginLeft:8,fontSize:11,color:C.sub}}>{c.date}</span>
                   <button onClick={e=>{e.stopPropagation();setReplyingId(replyingId===c.id?null:c.id);setReplyText('');}}
-                    style={{display:'block',background:'none',border:'none',color:C.sub,fontSize:11,fontWeight:700,cursor:'pointer',padding:'4px 0 0',marginLeft:0}}>
+                    style={{display:'block',textAlign:'left',background:'none',border:'none',color:C.sub,fontSize:11,fontWeight:700,cursor:'pointer',padding:'4px 0 0',marginLeft:0}}>
                     ↳ 답글 달기
                   </button>
                 </div>

@@ -26,7 +26,12 @@
       "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/test.cjs\")",
       "Bash(npx --yes playwright install chromium)",
       "Bash(curl -sf http://localhost:5183)",
-      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/test3.cjs\")"
+      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/test3.cjs\")",
+      "Bash(curl -sfI https://cccc-danpung.vercel.app)",
+      "Bash(curl -sI https://cccc-danpung.vercel.app)",
+      "Bash(curl -v https://cccc-danpung.vercel.app)",
+      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/check_reply_fix.cjs\")",
+      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/inspect.cjs\")"
     ]
   }
 }
