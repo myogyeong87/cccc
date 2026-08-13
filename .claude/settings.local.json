@@ -4,7 +4,29 @@
       "Bash(findstr firebase *)",
       "Bash(npm run *)",
       "Bash(git init *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "Bash(winget install *)",
+      "Bash(git push *)",
+      "Bash(vercel *)",
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "Bash(node -e \"const fs=require\\('fs'\\); const b=fs.readFileSync\\('public/pwa-192x192.png'\\); console.log\\('192 size:', b.length, 'bytes'\\); const b2=fs.readFileSync\\('public/pwa-512x512.png'\\); console.log\\('512 size:', b2.length, 'bytes'\\);\")",
+      "Bash(node --input-type=module)",
+      "Bash(git commit *)",
+      "Bash(npx vercel *)",
+      "Bash(node *)",
+      "PowerShell(git *)",
+      "PowerShell(npx vercel ls 2>&1 | Select-Object -First 20)",
+      "Read(//tmp/**)",
+      "Bash(npx --yes playwright --version)",
+      "Bash(timeout 30 bash -c 'until curl -sf http://localhost:5183 >/dev/null; do sleep 1; done')",
+      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node -e \"require\\('module'\\).globalPaths.push\\(process.env.NODE_PATH\\); require\\('playwright'\\)\")",
+      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/test.cjs\")",
+      "Bash(npx --yes playwright install chromium)",
+      "Bash(curl -sf http://localhost:5183)",
+      "Bash(NODE_PATH=\"C:\\\\Users\\\\User\\\\AppData\\\\Local/npm-cache/_npx/361ceb562f3b3235/node_modules\" node \"C:/Users/User/AppData/Local/Temp/claude/D--vibecoding-chunchen-playlist/b5118a0d-03a5-48bd-b2e2-db66bd2023f8/scratchpad/test3.cjs\")"
     ]
   }
 }

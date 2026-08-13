@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { db } from "./firebase";
 import {
-  collection, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp
+  collection, collectionGroup, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp, arrayUnion
 } from "firebase/firestore";
 
 const C = {
@@ -41,6 +41,9 @@ function extractYoutubeId(url) {
 function getMonthLabel(ms) {
   const [y,m]=ms.split("-"); return `${y}년 ${parseInt(m)}월`;
 }
+function getMonthShort(ms) {
+  const [y,m]=ms.split("-"); return `${y.slice(2)}.${parseInt(m)}`;
+}
 
 export default function PlaylistApp() {
   const [songs, setSongs] = useState([]);
@@ -72,6 +75,8 @@ export default function PlaylistApp() {
     window.matchMedia("(display-mode: standalone)").matches;
 
   const [showArchiveDrop, setShowArchiveDrop] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [commentCounts, setCommentCounts] = useState({});
   const [editingTheme, setEditingTheme] = useState(null);
   const [editingThemeVal, setEditingThemeVal] = useState("");
   const [form, setForm] = useState({title:"",artist:"",youtubeUrl:"",mood:[],recommender:"",comment:"",date:new Date().toISOString().slice(0,10)});
@@ -94,6 +99,15 @@ export default function PlaylistApp() {
   const activeMonth = selectedMonth || currentMonth;
   const months = [...new Set(songs.map(s=>s.month))].sort().reverse();
   const thisMonthSongs = songs.filter(s=>s.month===activeMonth);
+  const searchResults = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return songs.filter(s =>
+      s.title.toLowerCase().includes(q) ||
+      s.artist.toLowerCase().includes(q) ||
+      s.recommender.toLowerCase().includes(q)
+    );
+  })();
 
   const playlistSongs = thisMonthSongs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
   const allPlaylistSongs = songs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
@@ -160,7 +174,15 @@ export default function PlaylistApp() {
         setDoc(doc(db, "config", "moods"), { list: DEFAULT_MOODS });
       }
     });
-    return () => { unsubSongs(); unsubThemes(); unsubMoods(); };
+    const unsubComments = onSnapshot(collectionGroup(db, "comments"), snapshot => {
+      const counts = {};
+      snapshot.docs.forEach(d => {
+        const songId = d.ref.parent.parent.id;
+        counts[songId] = (counts[songId] || 0) + 1 + (d.data().replies?.length || 0);
+      });
+      setCommentCounts(counts);
+    });
+    return () => { unsubSongs(); unsubThemes(); unsubMoods(); unsubComments(); };
   }, []);
 
   useEffect(()=>{ setPreviewId(form.youtubeUrl?extractYoutubeId(form.youtubeUrl):null); },[form.youtubeUrl]);
@@ -560,8 +582,8 @@ export default function PlaylistApp() {
           <div style={s.playerCard}>
             <div style={s.playerHeader}>
               <div>
-                <div style={s.playerTitle}>{activeSongs[playlistIdx].title}</div>
-                <div style={s.playerArtist}>{activeSongs[playlistIdx].artist} · {activeSongs[playlistIdx].recommender}
+                <div style={s.playerTitle}>🎵 {activeSongs[playlistIdx].title}</div>
+                <div style={s.playerArtist}>🎤 {activeSongs[playlistIdx].artist} · {activeSongs[playlistIdx].recommender}
                   {playlistType==="all"&&<span style={{marginLeft:6,fontSize:11,color:C.accent,fontWeight:700}}>전체재생</span>}
                   {playlistType==="tag"&&<span style={{marginLeft:6,fontSize:11,color:C.accent,fontWeight:700}}>#{tagPlayMood}</span>}
                 </div>
@@ -587,39 +609,67 @@ export default function PlaylistApp() {
           {thisMonthSongs.map((song,i)=>(
             <SongRow key={song.id} song={song} index={i+1} moods={moods}
               expanded={expandedId===song.id} playing={playingId===song.id}
+              commentCount={commentCounts[song.id]||0}
               onToggle={()=>{setExpandedId(expandedId===song.id?null:song.id); if(playingId===song.id)setPlayingId(null);}}
               onPlay={()=>setPlayingId(playingId===song.id?null:song.id)}
               onEdit={openEdit} onDelete={handleDelete}/>
           ))}
         </div>
 
-        {/* 아카이브 드롭다운 */}
-        {months.filter(m=>m!==currentMonth).length>0&&(
-          <section style={s.archive}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <h2 style={{...s.sectionTitle,marginBottom:0}}>📦 지난 플레이리스트</h2>
-              <button style={s.archiveDropBtn} onClick={()=>setShowArchiveDrop(v=>!v)}>
-                {selectedMonth?getMonthLabel(selectedMonth):"월 선택"} {showArchiveDrop?"▲":"▼"}
-              </button>
-            </div>
-            {showArchiveDrop&&(
-              <div style={s.archiveDropList}>
-                {months.filter(m=>m!==currentMonth).map(m=>{
-                  const cnt=songs.filter(s=>s.month===m).length;
-                  const active=selectedMonth===m;
-                  return (
-                    <button key={m} style={{...s.archiveDropItem,...(active?s.archiveDropItemActive:{})}}
-                      onClick={()=>{setSelectedMonth(active?null:m);setShowArchiveDrop(false);window.scrollTo({top:0,behavior:"smooth"});}}>
-                      <span style={{fontWeight:700,fontSize:14,color:active?"#fff":C.text}}>{getMonthLabel(m)}</span>
-                      {monthThemes[m]&&<span style={{fontSize:12,color:active?C.accentBg:C.accent}}>{monthThemes[m]}</span>}
-                      <span style={{fontSize:12,color:active?"rgba(255,255,255,0.7)":C.sub,marginLeft:"auto"}}>{cnt}곡</span>
-                    </button>
-                  );
-                })}
+        {/* 아카이브 드롭다운 + 검색 */}
+        <section style={s.archive}>
+          {months.filter(m=>m!==currentMonth).length>0&&(
+            <>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <h2 style={{...s.sectionTitle,marginBottom:0}}>📦 지난 플레이리스트</h2>
+                <button style={s.archiveDropBtn} onClick={()=>setShowArchiveDrop(v=>!v)}>
+                  {selectedMonth?getMonthShort(selectedMonth):"월 선택"} {showArchiveDrop?"▲":"▼"}
+                </button>
               </div>
+              {showArchiveDrop&&(
+                <div style={s.archiveDropList}>
+                  {months.filter(m=>m!==currentMonth).map(m=>{
+                    const cnt=songs.filter(s=>s.month===m).length;
+                    const active=selectedMonth===m;
+                    return (
+                      <button key={m} style={{...s.archiveDropItem,...(active?s.archiveDropItemActive:{})}}
+                        onClick={()=>{setSelectedMonth(active?null:m);setShowArchiveDrop(false);window.scrollTo({top:0,behavior:"smooth"});}}>
+                        <span style={{...s.archiveDropMonth,color:active?"#fff":C.text}}>{getMonthShort(m)}</span>
+                        <span style={{...s.archiveDropTheme,color:active?C.accentBg:C.accent}}>{monthThemes[m]||""}</span>
+                        <span style={{fontSize:12,color:active?"rgba(255,255,255,0.7)":C.sub,flexShrink:0}}>{cnt}곡</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 검색 */}
+          <div style={s.searchBox}>
+            <span style={s.searchIcon}>🔍</span>
+            <input style={s.searchInput} placeholder="제목, 가수, 추천인으로 검색"
+              value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}/>
+            {searchQuery&&(
+              <button style={s.searchClearBtn} onClick={()=>setSearchQuery("")}>✕</button>
             )}
-          </section>
-        )}
+          </div>
+          {searchQuery.trim()&&(
+            <div style={{...s.list,marginTop:12}}>
+              {searchResults.length===0&&(
+                <div style={s.empty}><div style={{fontSize:32}}>🔍</div><div style={{marginTop:8}}>검색 결과가 없어요</div></div>
+              )}
+              {searchResults.map((song,i)=>(
+                <SongRow key={song.id} song={song} index={i+1} moods={moods}
+                  expanded={expandedId===song.id} playing={playingId===song.id}
+                  commentCount={commentCounts[song.id]||0}
+                  onToggle={()=>{setExpandedId(expandedId===song.id?null:song.id); if(playingId===song.id)setPlayingId(null);}}
+                  onPlay={()=>setPlayingId(playingId===song.id?null:song.id)}
+                  onEdit={openEdit} onDelete={handleDelete}/>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
 
       {/* 곡 추가 모달 */}
@@ -756,29 +806,31 @@ export default function PlaylistApp() {
                 {themeEditMode?"완료":"편집"}
               </button>
             </div>
-            {Object.entries(monthThemes).sort().reverse().map(([m,theme])=>(
-              <div key={m} style={s.themeRow}>
-                <span style={{fontWeight:700,fontSize:14,minWidth:80,color:C.text}}>{getMonthLabel(m)}</span>
-                {editingTheme===m ? (
-                  <>
-                    <input style={{...s.input,flex:1,padding:"4px 8px",fontSize:13}}
-                      value={editingThemeVal} autoFocus
-                      onChange={e=>setEditingThemeVal(e.target.value)}
-                      onKeyDown={e=>e.key==="Enter"&&saveEditTheme(m)}/>
-                    <button style={s.delBtn} onClick={()=>saveEditTheme(m)}>✅</button>
-                    <button style={s.delBtn} onClick={()=>setEditingTheme(null)}>✕</button>
-                  </>
-                ) : (
-                  <>
-                    <span style={{flex:1,fontSize:13,color:C.accent,fontWeight:600}}>{theme}</span>
-                    {themeEditMode&&<>
-                      <button style={s.delBtn} onClick={()=>{setEditingTheme(m);setEditingThemeVal(theme);}}>✏️</button>
-                      <button style={s.delBtn} onClick={async()=>{const n={...monthThemes};delete n[m];await setDoc(doc(db,"config","monthThemes"),n);}}>✕</button>
-                    </>}
-                  </>
-                )}
-              </div>
-            ))}
+            <div style={s.themeList}>
+              {Object.entries(monthThemes).sort().reverse().map(([m,theme])=>(
+                <div key={m} style={s.themeRow}>
+                  <span style={s.themeRowMonth}>{getMonthShort(m)}</span>
+                  {editingTheme===m ? (
+                    <>
+                      <input style={{...s.input,flex:1,padding:"4px 8px",fontSize:13}}
+                        value={editingThemeVal} autoFocus
+                        onChange={e=>setEditingThemeVal(e.target.value)}
+                        onKeyDown={e=>e.key==="Enter"&&saveEditTheme(m)}/>
+                      <button style={s.delBtn} onClick={()=>saveEditTheme(m)}>✅</button>
+                      <button style={s.delBtn} onClick={()=>setEditingTheme(null)}>✕</button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={s.themeRowContent}>{theme}</span>
+                      {themeEditMode&&<>
+                        <button style={s.delBtn} onClick={()=>{setEditingTheme(m);setEditingThemeVal(theme);}}>✏️</button>
+                        <button style={s.delBtn} onClick={async()=>{const n={...monthThemes};delete n[m];await setDoc(doc(db,"config","monthThemes"),n);}}>✕</button>
+                      </>}
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
             <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
               <input style={{...s.input,flex:1,minWidth:120}} type="month" value={themeForm.month}
                 onChange={e=>setThemeForm(f=>({...f,month:e.target.value}))}/>
@@ -943,7 +995,7 @@ function FL({children}){
   return <label style={{display:"block",fontSize:13,color:C.sub,marginBottom:5,marginTop:14,fontWeight:700}}>{children}</label>;
 }
 
-function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDelete}){
+function SongRow({song,index,moods,expanded,playing,commentCount,onToggle,onPlay,onEdit,onDelete}){
   const hasThumb=song.youtubeId&&song.youtubeId.length>5;
   const thumbUrl=hasThumb?`https://img.youtube.com/vi/${song.youtubeId}/mqdefault.jpg`:null;
   const ytLink=`https://www.youtube.com/watch?v=${song.youtubeId}`;
@@ -959,6 +1011,7 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
           <div style={expanded ? s.rowTitleExpanded : s.rowTitle}>{song.title}</div>
           <div style={s.rowArtist}>{song.artist} · <span style={{color:C.accent,fontWeight:600}}>{song.recommender}</span></div>
         </div>
+        {!!commentCount&&<span style={s.commentBadge}>💬 {commentCount}</span>}
         {song.mood[0]&&<span style={tagStyle(song.mood[0],moods)}>{song.mood[0]}</span>}
         <span style={s.chevron}>{expanded?"▲":"▼"}</span>
       </div>
@@ -997,7 +1050,7 @@ function SongRow({song,index,moods,expanded,playing,onToggle,onPlay,onEdit,onDel
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12,marginBottom:12}}>
             {song.mood.map(m=><span key={m} style={tagStyle(m,moods)}>{m}</span>)}
           </div>
-          {song.comment&&<p style={s.detailComment}>💬 {song.comment}</p>}
+          {song.comment&&<p style={{...s.detailComment,textAlign:"justify"}}>💬 {song.comment}</p>}
           <div style={s.detailFooter}>
             <span>👤 {song.recommender}</span>
             <span>{song.date}</span>
@@ -1023,6 +1076,9 @@ function ReactionSection({ songId }) {
   const [comments, setComments] = useState([]);
   const [nickname, setNickname] = useState(() => localStorage.getItem('cccc_nickname') || '');
   const [commentText, setCommentText] = useState('');
+  const [replyingId, setReplyingId] = useState(null);
+  const [replyNickname, setReplyNickname] = useState(() => localStorage.getItem('cccc_nickname') || '');
+  const [replyText, setReplyText] = useState('');
 
   useEffect(() => {
     const unsubReact = onSnapshot(doc(db,'reactions',songId), snap => {
@@ -1059,6 +1115,22 @@ function ReactionSection({ songId }) {
     setCommentText('');
   }
 
+  async function handleReply(e, commentId) {
+    e.stopPropagation();
+    if (!replyNickname.trim() || !replyText.trim()) return;
+    localStorage.setItem('cccc_nickname', replyNickname.trim());
+    await updateDoc(doc(db,'reactions',songId,'comments',commentId), {
+      replies: arrayUnion({
+        nickname: replyNickname.trim(),
+        text: replyText.trim(),
+        date: new Date().toISOString().slice(0,10),
+        createdAt: Date.now(),
+      })
+    });
+    setReplyText('');
+    setReplyingId(null);
+  }
+
   return (
     <div style={{borderTop:`1px solid ${C.border}`,marginTop:14,paddingTop:14}}>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:12}}>
@@ -1080,14 +1152,45 @@ function ReactionSection({ songId }) {
       {comments.length>0&&(
         <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:6}}>
           {comments.map(c=>(
-            <div key={c.id} style={{background:C.bg2,borderRadius:10,padding:'8px 12px',fontSize:13,display:'flex',alignItems:'flex-start',gap:6}}>
-              <div style={{flex:1}}>
-                <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{c.nickname}</span>
-                <span style={{color:C.text}}>{c.text}</span>
-                <span style={{marginLeft:8,fontSize:11,color:C.sub}}>{c.date}</span>
+            <div key={c.id}>
+              <div style={{background:C.bg2,borderRadius:10,padding:'8px 12px',fontSize:13,display:'flex',alignItems:'flex-start',gap:6}}>
+                <div style={{flex:1}}>
+                  <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{c.nickname}</span>
+                  <span style={{color:C.text}}>{c.text}</span>
+                  <span style={{marginLeft:8,fontSize:11,color:C.sub}}>{c.date}</span>
+                  <button onClick={e=>{e.stopPropagation();setReplyingId(replyingId===c.id?null:c.id);setReplyText('');}}
+                    style={{display:'block',background:'none',border:'none',color:C.sub,fontSize:11,fontWeight:700,cursor:'pointer',padding:'4px 0 0',marginLeft:0}}>
+                    ↳ 답글 달기
+                  </button>
+                </div>
+                <button onClick={async e=>{e.stopPropagation();if(!window.confirm("댓글을 삭제할까요?"))return;await deleteDoc(doc(db,'reactions',songId,'comments',c.id));}}
+                  style={{background:'none',border:'none',color:C.sub,fontSize:12,cursor:'pointer',padding:'0 2px',flexShrink:0,lineHeight:1}}>✕</button>
               </div>
-              <button onClick={async e=>{e.stopPropagation();if(!window.confirm("댓글을 삭제할까요?"))return;await deleteDoc(doc(db,'reactions',songId,'comments',c.id));}}
-                style={{background:'none',border:'none',color:C.sub,fontSize:12,cursor:'pointer',padding:'0 2px',flexShrink:0,lineHeight:1}}>✕</button>
+
+              {c.replies?.length>0&&(
+                <div style={{display:'flex',flexDirection:'column',gap:5,marginTop:5,marginLeft:18}}>
+                  {c.replies.map((r,ri)=>(
+                    <div key={ri} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:10,padding:'6px 10px',fontSize:12.5}}>
+                      <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{r.nickname}</span>
+                      <span style={{color:C.text}}>{r.text}</span>
+                      <span style={{marginLeft:8,fontSize:10.5,color:C.sub}}>{r.date}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {replyingId===c.id&&(
+                <div style={{display:'flex',gap:6,alignItems:'center',marginTop:6,marginLeft:18}} onClick={e=>e.stopPropagation()}>
+                  <input style={{...s.input,width:70,flexShrink:0,padding:'6px 10px',fontSize:12.5}}
+                    placeholder="닉네임" value={replyNickname} onChange={e=>setReplyNickname(e.target.value)}/>
+                  <input style={{...s.input,flex:1,padding:'6px 10px',fontSize:12.5}}
+                    placeholder="답글 남기기" value={replyText}
+                    onChange={e=>setReplyText(e.target.value)}
+                    onKeyDown={e=>e.key==='Enter'&&handleReply(e,c.id)}/>
+                  <button style={{...s.submitBtn,flex:'none',padding:'6px 12px',fontSize:12.5,whiteSpace:'nowrap'}}
+                    onClick={e=>handleReply(e,c.id)}>등록</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -1166,8 +1269,15 @@ const s = {
   sectionTitle:{ fontSize:16,fontWeight:800,marginBottom:14,color:C.text },
   archiveDropBtn:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer",fontSize:13,fontWeight:700,color:C.accent,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap" },
   archiveDropList:{ marginTop:10,border:`1px solid ${C.border}`,borderRadius:14,background:C.white,maxHeight:260,overflowY:"auto" },
-  archiveDropItem:{ width:"100%",padding:"12px 16px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:"none",border:"none",borderBottom:`1px solid ${C.border}` },
+  archiveDropItem:{ width:"100%",height:48,padding:"0 16px",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:10,background:"none",border:"none",borderBottom:`1px solid ${C.border}`,boxSizing:"border-box" },
   archiveDropItemActive:{ background:C.accent },
+  archiveDropMonth:{ fontWeight:700,fontSize:14,width:56,flexShrink:0 },
+  archiveDropTheme:{ flex:1,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0 },
+  searchBox:{ display:"flex",alignItems:"center",gap:8,background:C.white,border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px",marginTop:16 },
+  searchIcon:{ fontSize:15,flexShrink:0,color:C.sub },
+  searchInput:{ flex:1,border:"none",outline:"none",background:"none",fontSize:14,color:C.text,minWidth:0 },
+  searchClearBtn:{ background:"none",border:"none",color:C.sub,fontSize:14,cursor:"pointer",padding:"0 2px",flexShrink:0 },
+  commentBadge:{ fontSize:12,color:C.sub,fontWeight:600,flexShrink:0,whiteSpace:"nowrap" },
   overlay:{ position:"fixed",inset:0,zIndex:200,background:"rgba(37,43,30,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center" },
   modal:{ background:C.bg,borderRadius:"22px 22px 0 0",padding:"20px 20px 40px",width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto" },
   modalHandle:{ width:36,height:4,background:C.border,borderRadius:2,margin:"0 auto 16px" },
@@ -1184,7 +1294,10 @@ const s = {
   importGuide:{ background:C.bg2,border:`1px solid ${C.border}`,borderRadius:12,padding:14,marginBottom:4 },
   mgmtBox:{ background:C.bg2,borderRadius:12,padding:16,marginBottom:14 },
   mgmtSub:{ fontSize:15,fontWeight:800,marginBottom:10,color:C.text },
-  themeRow:{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${C.border}` },
+  themeList:{ maxHeight:240,overflowY:"auto" },
+  themeRow:{ display:"flex",alignItems:"flex-start",gap:8,padding:"8px 0",borderBottom:`1px solid ${C.border}`,textAlign:"left" },
+  themeRowMonth:{ fontWeight:700,fontSize:14,width:56,flexShrink:0,color:C.text,textAlign:"left" },
+  themeRowContent:{ flex:1,fontSize:13,color:C.accent,fontWeight:600,textAlign:"left",overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical" },
   delBtn:{ background:"none",border:"none",color:C.sub,fontSize:13,cursor:"pointer",padding:"2px 6px",fontWeight:700 },
   editToggleBtn:{ background:"none",border:`1px solid ${C.border}`,borderRadius:14,padding:"4px 12px",color:C.sub,fontSize:12,fontWeight:700,cursor:"pointer" },
   editActiveBtn:{ background:C.accent,border:`1px solid ${C.accent}`,borderRadius:14,padding:"4px 12px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer" },
