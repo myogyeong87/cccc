@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { db } from "./firebase";
 import {
   collection, collectionGroup, doc, addDoc, deleteDoc, updateDoc, setDoc, onSnapshot, query, orderBy, serverTimestamp, arrayUnion
@@ -48,7 +48,11 @@ function getMonthShort(ms) {
 export default function PlaylistApp() {
   const [songs, setSongs] = useState([]);
   const [monthThemes, setMonthThemes] = useState({});
-  const [moods, setMoods] = useState([]);
+  const [savedMoods, setSavedMoods] = useState([]);     // Firestore config/moods.list
+  const [removedMoods, setRemovedMoods] = useState([]); // 곡에 남아 있어도 목록에서 지운 태그
+  const [moodsLoaded, setMoodsLoaded] = useState(false);
+  const [songsLoaded, setSongsLoaded] = useState(false);
+  const moodSyncRef = useRef("");
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [playingId, setPlayingId] = useState(null);
@@ -109,6 +113,31 @@ export default function PlaylistApp() {
     );
   })();
 
+  // 태그 목록 = Firestore 목록 ∪ 곡에서 쓰인 무드 (목록에서 지운 태그는 제외)
+  const moods = useMemo(() => {
+    const out = [...savedMoods];
+    const seen = new Set(out);
+    songs.forEach(s => (s.mood||[]).forEach(m => {
+      if (m && !seen.has(m) && !removedMoods.includes(m)) { seen.add(m); out.push(m); }
+    }));
+    return out;
+  }, [savedMoods, removedMoods, songs]);
+
+  async function saveMoodList(list, removed = removedMoods) {
+    await setDoc(doc(db,"config","moods"),{ list, removed: removed.filter(r=>!list.includes(r)) });
+  }
+
+  // 곡에서 새로 발견된 태그를 Firestore 목록에도 한 번만 저장
+  useEffect(() => {
+    if (!moodsLoaded || !songsLoaded) return;
+    const missing = moods.filter(m => !savedMoods.includes(m));
+    if (missing.length === 0) return;
+    const key = missing.join("|");
+    if (moodSyncRef.current === key) return;
+    moodSyncRef.current = key;
+    saveMoodList(moods).catch(err => console.error("태그 목록 저장 실패:", err));
+  }, [moods, savedMoods, moodsLoaded, songsLoaded]);
+
   const playlistSongs = thisMonthSongs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
   const allPlaylistSongs = songs.filter(s=>s.youtubeId&&s.youtubeId.length>5);
   const tagPlaylistSongs = tagPlayMood
@@ -118,9 +147,13 @@ export default function PlaylistApp() {
     : playlistType==="tag" ? tagPlaylistSongs
     : playlistSongs;
 
-  // 태그별 전체 곡 수
+  // 태그별 곡 수 (곡 데이터 기준)
   const tagCounts = {};
-  moods.forEach(m => { tagCounts[m] = songs.filter(s=>s.mood.includes(m)).length; });
+  const tagPlayCounts = {};
+  songs.forEach(s => (s.mood||[]).forEach(m => {
+    tagCounts[m] = (tagCounts[m]||0) + 1;
+    if (s.youtubeId&&s.youtubeId.length>5) tagPlayCounts[m] = (tagPlayCounts[m]||0) + 1;
+  }));
 
   const ytPlayerRef = useRef(null);
   const nextTrackRef = useRef(null);
@@ -163,13 +196,16 @@ export default function PlaylistApp() {
         return b.date.localeCompare(a.date);
       });
       setSongs(data);
+      setSongsLoaded(true);
     });
     const unsubThemes = onSnapshot(doc(db, "config", "monthThemes"), snapshot => {
       setMonthThemes(snapshot.exists() ? snapshot.data() : {});
     });
     const unsubMoods = onSnapshot(doc(db, "config", "moods"), snapshot => {
       if (snapshot.exists()) {
-        setMoods(snapshot.data().list || DEFAULT_MOODS);
+        setSavedMoods(snapshot.data().list || DEFAULT_MOODS);
+        setRemovedMoods(snapshot.data().removed || []);
+        setMoodsLoaded(true);
       } else {
         setDoc(doc(db, "config", "moods"), { list: DEFAULT_MOODS });
       }
@@ -279,8 +315,7 @@ export default function PlaylistApp() {
   async function addInlineTag(){
     const tag=inlineTag.trim(); if(!tag) return;
     if(!moods.includes(tag)){
-      const next=[...moods,tag];
-      await setDoc(doc(db,"config","moods"),{list:next});
+      await saveMoodList([...moods,tag]);
     }
     if(!form.mood.includes(tag)) setForm(f=>({...f,mood:[...f.mood,tag]}));
     setInlineTag("");
@@ -406,7 +441,7 @@ export default function PlaylistApp() {
         const next = [...moods];
         newMoods.forEach(m => { if (!next.includes(m)) next.push(m); });
         console.log("6. 새 태그 저장 시도:", [...newMoods]);
-        await setDoc(doc(db,"config","moods"),{list:next});
+        await saveMoodList(next);
         console.log("6. 새 태그 저장 완료");
       }
       const themeMap = {};
@@ -451,9 +486,14 @@ export default function PlaylistApp() {
   async function addGlobalTag(){
     const tag=newTagInput.trim(); if(!tag) return;
     if(moods.includes(tag)){ toast("이미 있는 태그예요!"); return; }
-    const next=[...moods,tag];
-    await setDoc(doc(db,"config","moods"),{list:next});
+    await saveMoodList([...moods,tag]);
     setNewTagInput(""); toast(`✅ "${tag}" 태그 추가됨!`);
+  }
+  async function deleteGlobalTag(tag){
+    const used = tagCounts[tag] || 0;
+    if (used > 0 && !window.confirm(`${used}곡에서 사용 중이에요. 정말 목록에서 지울까요?`)) return;
+    // 곡에 적힌 무드는 그대로 두고, 자동 합치기로 다시 생기지 않게 removed에 기록
+    await saveMoodList(moods.filter(x=>x!==tag), used > 0 ? [...removedMoods, tag] : removedMoods);
   }
   async function handleDelete(id){
     if(!window.confirm("이 곡을 삭제할까요?")) return;
@@ -561,13 +601,13 @@ export default function PlaylistApp() {
           {showTagPlay && (
             <div style={{width:"100%",marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                {moods.filter(m=>tagCounts[m]>0).map(m=>(
+                {moods.filter(m=>tagPlayCounts[m]>0).map(m=>(
                   <button key={m}
                     style={{...tagStyle(m,moods), cursor:"pointer", padding:"6px 13px", fontSize:13,
                       outline: playlistMode&&playlistType==="tag"&&tagPlayMood===m?`2px solid ${tagColor(m,moods)}`:"none",
                       outlineOffset:2}}
                     onClick={()=>startTagPlaylist(m)}>
-                    {m} <span style={{fontWeight:500,opacity:0.75}}>{tagCounts[m]}</span>
+                    {m} <span style={{fontWeight:500,opacity:0.75}}>{tagPlayCounts[m]}</span>
                   </button>
                 ))}
               </div>
@@ -852,9 +892,9 @@ export default function PlaylistApp() {
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
               {moods.map(m=>(
                 <div key={m} style={{display:"flex",alignItems:"center",gap:2}}>
-                  <span style={tagStyle(m,moods)}>{m}</span>
+                  <span style={tagStyle(m,moods)}>{m} <span style={{fontWeight:500,opacity:0.75}}>{tagCounts[m]||0}</span></span>
                   {tagEditMode&&(
-                    <button style={s.delBtn} onClick={async()=>{const next=moods.filter(x=>x!==m);await setDoc(doc(db,"config","moods"),{list:next});}}>✕</button>
+                    <button style={s.delBtn} onClick={()=>deleteGlobalTag(m)}>✕</button>
                   )}
                 </div>
               ))}
@@ -1150,14 +1190,16 @@ function ReactionSection({ songId }) {
         })}
       </div>
       {comments.length>0&&(
-        <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:6}}>
+        <div style={{marginBottom:10,display:'flex',flexDirection:'column',gap:6,textAlign:'left'}}>
           {comments.map(c=>(
             <div key={c.id}>
               <div style={{background:C.bg2,borderRadius:10,padding:'8px 12px',fontSize:13,display:'flex',alignItems:'flex-start',gap:6}}>
-                <div style={{flex:1}}>
-                  <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{c.nickname}</span>
-                  <span style={{color:C.text}}>{c.text}</span>
-                  <span style={{marginLeft:8,fontSize:11,color:C.sub}}>{c.date}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={s.cmtHead}>
+                    <span style={{fontWeight:700,color:C.accent}}>{c.nickname}</span>
+                    <span style={{fontSize:11,color:C.sub}}>{c.date}</span>
+                  </div>
+                  <div style={s.cmtText}>{c.text}</div>
                   <button onClick={e=>{e.stopPropagation();setReplyingId(replyingId===c.id?null:c.id);setReplyText('');}}
                     style={{display:'block',textAlign:'left',background:'none',border:'none',color:C.sub,fontSize:11,fontWeight:700,cursor:'pointer',padding:'4px 0 0',marginLeft:0}}>
                     ↳ 답글 달기
@@ -1171,9 +1213,11 @@ function ReactionSection({ songId }) {
                 <div style={{display:'flex',flexDirection:'column',gap:5,marginTop:5,marginLeft:18}}>
                   {c.replies.map((r,ri)=>(
                     <div key={ri} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:10,padding:'6px 10px',fontSize:12.5}}>
-                      <span style={{fontWeight:700,color:C.accent,marginRight:6}}>{r.nickname}</span>
-                      <span style={{color:C.text}}>{r.text}</span>
-                      <span style={{marginLeft:8,fontSize:10.5,color:C.sub}}>{r.date}</span>
+                      <div style={s.cmtHead}>
+                        <span style={{fontWeight:700,color:C.accent}}>{r.nickname}</span>
+                        <span style={{fontSize:10.5,color:C.sub}}>{r.date}</span>
+                      </div>
+                      <div style={s.cmtText}>{r.text}</div>
                     </div>
                   ))}
                 </div>
@@ -1277,6 +1321,8 @@ const s = {
   searchIcon:{ fontSize:15,flexShrink:0,color:C.sub },
   searchInput:{ flex:1,border:"none",outline:"none",background:"none",fontSize:14,color:C.text,minWidth:0 },
   searchClearBtn:{ background:"none",border:"none",color:C.sub,fontSize:14,cursor:"pointer",padding:"0 2px",flexShrink:0 },
+  cmtHead:{ display:"flex",alignItems:"baseline",gap:6,marginBottom:2 },
+  cmtText:{ color:C.text,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"keep-all",overflowWrap:"anywhere" },
   commentBadge:{ fontSize:12,color:C.sub,fontWeight:600,flexShrink:0,whiteSpace:"nowrap" },
   overlay:{ position:"fixed",inset:0,zIndex:200,background:"rgba(37,43,30,0.45)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center" },
   modal:{ background:C.bg,borderRadius:"22px 22px 0 0",padding:"20px 20px 40px",width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto" },
