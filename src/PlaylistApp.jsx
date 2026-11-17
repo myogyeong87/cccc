@@ -1090,7 +1090,7 @@ function SongRow({song,index,moods,expanded,playing,commentCount,onToggle,onPlay
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:12,marginBottom:12}}>
             {song.mood.map(m=><span key={m} style={tagStyle(m,moods)}>{m}</span>)}
           </div>
-          {song.comment&&<p style={{...s.detailComment,textAlign:"justify"}}>💬 {song.comment}</p>}
+          {song.comment&&<p style={{...s.detailComment,textAlign:"left",wordBreak:"keep-all",overflowWrap:"anywhere"}}>💬 {song.comment}</p>}
           <div style={s.detailFooter}>
             <span>👤 {song.recommender}</span>
             <span>{song.date}</span>
